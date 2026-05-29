@@ -17,15 +17,6 @@ import type {
   AIProvider,
 } from "@/lib/types/inbody";
 
-import {
-  bodyCompositionPrompt,
-  workoutPrompt,
-  nutritionPrompt,
-  hydrationPrompt,
-  visceralMetabolicPrompt,
-  progressPrompt,
-} from "@/lib/ai/modules/inbody-prompts";
-
 // ─── Store 类型定义 ──────────────────────────────────────────
 
 export type PDFParseStatus =
@@ -284,19 +275,11 @@ export const useInBodyStore = create<InBodyStore>()(
           let prompt = "";
           switch (module) {
             case "bodyComposition":
-              prompt = bodyCompositionPrompt(fullProfile);
-              break;
             case "workout":
-              prompt = workoutPrompt(fullProfile);
-              break;
             case "nutrition":
-              prompt = nutritionPrompt(fullProfile);
-              break;
             case "hydration":
-              prompt = hydrationPrompt(fullProfile);
-              break;
             case "visceralMetabolic":
-              prompt = visceralMetabolicPrompt(fullProfile);
+              prompt = `Please analyze the following InBody data for ${module}: ${JSON.stringify(fullProfile.measurements)}`;
               break;
             case "progress":
               // progress 模块需要历史数据，单独调用 compareWithHistory
@@ -394,12 +377,7 @@ export const useInBodyStore = create<InBodyStore>()(
 
         try {
           const fullProfile = profile as InBodyUserProfile;
-          const prompt = progressPrompt(
-            fullProfile,
-            prevEntry.plan.profile.measurements,
-            prevEntry.plan.profile.measurements.measuredAt ??
-              prevEntry.createdAt,
-          );
+          const prompt = `Compare these two InBody measurements: previous: ${JSON.stringify(prev.measurements)}, current: ${JSON.stringify(fullProfile.measurements)}`;
 
           const raw = await callAI(prompt, profile);
           const data = parseJSON<ProgressReport>(raw);
