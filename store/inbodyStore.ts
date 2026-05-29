@@ -24,7 +24,7 @@ import {
   hydrationPrompt,
   visceralMetabolicPrompt,
   progressPrompt,
-} from "../ai/inbody-prompts";
+} from "@/lib/ai/modules/inbody-prompts";
 
 // ─── Store 类型定义 ──────────────────────────────────────────
 
