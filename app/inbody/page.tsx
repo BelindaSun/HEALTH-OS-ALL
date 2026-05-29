@@ -1373,7 +1373,14 @@ function StepMeasurements({ onNext, onBack }) {
     { id: "seg", label: "💪 节段" },
   ];
 
-  const FI = ({ label, field, unit, hint, color = C.text, seg = false }) => (
+  const FI = ({
+    label,
+    field,
+    unit,
+    hint = "",
+    color = C.text,
+    seg = false,
+  }) => (
     <div style={{ marginBottom: 14 }}>
       <div
         style={{

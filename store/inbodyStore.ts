@@ -15,9 +15,9 @@ import type {
   VisceralMetabolicPlan,
   ProgressReport,
   AIProvider,
-} from "../../types/inbody";
+} from "@/lib/types/inbody";
 
-import type { ParseResult } from "../ai/inbody-parser";
+import type { ParseResult } from "@/lib/ai/inbody-parser";
 
 import {
   bodyCompositionPrompt,
