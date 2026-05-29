@@ -1373,6 +1373,7 @@ function StepMeasurements({ onNext, onBack }) {
     { id: "seg", label: "💪 节段" },
   ];
 
+<<<<<<< HEAD
   const FI = ({
     label,
     field,
@@ -1381,6 +1382,9 @@ function StepMeasurements({ onNext, onBack }) {
     color = C.text,
     seg = false,
   }) => (
+=======
+  const FI = ({ label, field, unit, hint = "", color = C.text, seg = false }) => (
+>>>>>>> bfb8c6371dc78cec03f7cd04924eb4a5bec4dd87
     <div style={{ marginBottom: 14 }}>
       <div
         style={{
