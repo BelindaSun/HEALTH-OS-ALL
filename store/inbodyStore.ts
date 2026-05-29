@@ -377,7 +377,7 @@ export const useInBodyStore = create<InBodyStore>()(
 
         try {
           const fullProfile = profile as InBodyUserProfile;
-          const prompt = `Compare these two InBody measurements: previous: ${JSON.stringify(prev.measurements)}, current: ${JSON.stringify(fullProfile.measurements)}`;
+          const prompt = `Compare these two InBody measurements: previous: ${JSON.stringify(prevEntry.plan.profile.measurements)}, current: ${JSON.stringify(fullProfile.measurements)}`;
 
           const raw = await callAI(prompt, profile);
           const data = parseJSON<ProgressReport>(raw);
