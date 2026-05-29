@@ -28,6 +28,12 @@ export default function RootLayout({
           >
             历史方案
           </a>
+          <a
+            href="/inbody"
+            className="px-4 py-2 rounded-full border border-white/10 bg-black/40 backdrop-blur text-white/60 hover:text-white hover:bg-white/10 text-sm transition"
+          >
+            InBody OS
+          </a>
         </nav>
 
         {children}
