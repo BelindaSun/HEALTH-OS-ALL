@@ -17,8 +17,6 @@ import type {
   AIProvider,
 } from "@/lib/types/inbody";
 
-import type { ParseResult } from "@/lib/ai/inbody-parser";
-
 import {
   bodyCompositionPrompt,
   workoutPrompt,
@@ -46,9 +44,9 @@ interface InBodyStore {
 
   // ── PDF 解析状态 ──
   pdfParseStatus: PDFParseStatus;
-  pdfParseResult: ParseResult | null;
+  pdfParseResult: any | null;
   setPDFParseStatus: (status: PDFParseStatus) => void;
-  setPDFParseResult: (result: ParseResult) => void;
+  setPDFParseResult: (result: any) => void;
   clearPDFState: () => void;
 
   // ── 当前方案 ──
