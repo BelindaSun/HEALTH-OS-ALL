@@ -536,7 +536,7 @@ function NumField({
   value,
   onChange,
   unit,
-  hint,
+  hint = "",
   color = C.text,
   step = "0.01",
 }) {
