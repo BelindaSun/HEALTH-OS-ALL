@@ -1336,7 +1336,7 @@ function StepImport({ state, onUpdate, onNext }) {
   const [parsing, setParsing] = useState(false);
   const [parseError, setParseError] = useState(null);
   const [preview, setPreview] = useState(null);
-  const fileRef = useRef();
+  const fileRef = useRef(null);
 
   const handleFile = useCallback(
     (file) => {
