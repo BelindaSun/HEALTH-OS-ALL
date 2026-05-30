@@ -1376,7 +1376,7 @@ function StepImport({ state, onUpdate, onNext }) {
       );
       const parsed = parseJSON(raw);
       // fill measurements
-      const m = {};
+      const m: Record<string, any> = {};
       const fields = [
         "weight",
         "skeletalMuscleMass",
