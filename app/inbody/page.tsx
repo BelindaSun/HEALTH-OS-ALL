@@ -1348,7 +1348,7 @@ function StepImport({ state, onUpdate, onNext }) {
       reader.onload = (e) => {
         setPreview(e.target.result);
         onUpdate("imageFile", file);
-        onUpdate("imageBase64", e.target.result.split(",")[1]);
+        onUpdate("imageBase64", (e.target.result as string).split(",")[1]);
       };
       reader.readAsDataURL(file);
       setParseError(null);
