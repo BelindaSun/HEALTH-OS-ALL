@@ -2413,7 +2413,7 @@ function StepProfile({ state, onUpdate, onNext, onBack }) {
                 openai: "gpt-4o",
                 claude: "claude-sonnet-4-6",
                 gemini: "gemini-2.0-flash",
-                ollama: "qwen2.5:14b",
+                ollama: "qwen2.5:3b",
               }[state.provider] || "model name"
             }
             value={state.modelName}
