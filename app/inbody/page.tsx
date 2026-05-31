@@ -2674,18 +2674,21 @@ function Dashboard({ state, onReset }) {
             {genAll ? "生成中..." : "✦ 全部生成"}
           </button>
           <button
-            onClick={onReset}
+            onClick={goBack}
             style={{
-              padding: "9px 14px",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+              padding: "8px 16px",
               borderRadius: 12,
               border: `1px solid ${C.border}`,
-              background: "transparent",
-              color: C.textMuted,
-              fontSize: 12,
+              background: "rgba(255,255,255,0.04)",
+              color: C.textSub,
+              fontSize: 13,
               cursor: "pointer",
             }}
           >
-            重新导入
+            {"<-"} 上一步
           </button>
         </div>
       </div>
@@ -3146,7 +3149,11 @@ export default function InBodyOS() {
   const [state, setState] = useState(INIT);
   const update = (key, val) => setState((s) => ({ ...s, [key]: val }));
   const go = (step) => setState((s) => ({ ...s, step }));
-
+  const goBack = () => {
+    const steps = ["welcome", "import", "measurements", "profile", "dashboard"];
+    const idx = steps.indexOf(state.step);
+    if (idx > 0) go(steps[idx - 1]);
+  };
   return (
     <div
       style={{
