@@ -2486,9 +2486,6 @@ function StepProfile({ state, onUpdate, onNext, onBack }) {
 //  DASHBOARD
 // ══════════════════════════════════════════════════════════════
 function Dashboard({ state, onReset }) {
-  const [localProvider, setLocalProvider] = useState(state.provider);
-  const [localApiKey, setLocalApiKey] = useState(state.apiKey);
-  const [localModel, setLocalModel] = useState(state.modelName);
   const m = state.measurements;
   const [moduleStates, setModuleStates] = useState({
     bodyComposition: "idle",
@@ -2502,9 +2499,9 @@ function Dashboard({ state, onReset }) {
   const [genAll, setGenAll] = useState(false);
 
   const aiCfg = {
-    provider: localProvider,
-    apiKey: localApiKey || state.apiKey,
-    modelName: localModel || state.modelName,
+    provider: state.provider,
+    apiKey: state.apiKey,
+    modelName: state.modelName,
   };
 
   const MODULES = [
@@ -2652,63 +2649,6 @@ function Dashboard({ state, onReset }) {
             {state.age}岁 · {state.gender === "male" ? "男" : "女"} ·{" "}
             {GOAL_CN[state.goal] || state.goal}
           </div>
-        </div>
-
-        {/* 模型切换栏 */}
-        <div
-          style={g({
-            padding: "12px 20px",
-            marginBottom: 20,
-            display: "flex",
-            alignItems: "center",
-            gap: 12,
-            flexWrap: "wrap",
-          })}
-        >
-          <div style={{ fontSize: 12, color: C.textMuted, flexShrink: 0 }}>
-            生成引擎
-          </div>
-          {TEXT_PROVIDERS.map((p) => (
-            <button
-              key={p.id}
-              onClick={() => setLocalProvider(p.id)}
-              style={{
-                padding: "5px 12px",
-                borderRadius: 20,
-                cursor: "pointer",
-                outline: "none",
-                border: `1px solid ${localProvider === p.id ? `${C.emerald}50` : "transparent"}`,
-                background:
-                  localProvider === p.id
-                    ? C.emeraldDim
-                    : "rgba(255,255,255,0.04)",
-                color: localProvider === p.id ? C.emerald : C.textMuted,
-                fontSize: 12,
-                fontWeight: 600,
-              }}
-            >
-              {p.label}
-              {!p.vpn ? " ✅" : ""}
-            </button>
-          ))}
-          <input
-            type="password"
-            placeholder="API Key（留空用之前填的）"
-            value={localApiKey}
-            onChange={(e) => setLocalApiKey(e.target.value)}
-            style={{
-              flex: 1,
-              minWidth: 160,
-              padding: "6px 12px",
-              background: "rgba(255,255,255,0.04)",
-              border: `1px solid ${C.border}`,
-              borderRadius: 10,
-              color: C.text,
-              fontSize: 12,
-              outline: "none",
-              fontFamily: "inherit",
-            }}
-          />
         </div>
 
         {/* 核心数据 */}
