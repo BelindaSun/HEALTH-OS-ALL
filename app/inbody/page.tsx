@@ -1,5 +1,7 @@
 "use client";
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
+
+const STORAGE_KEY = "inbody_os_state";
 
 // ── COLORS ──────────────────────────────────────────────────
 const C = {
@@ -385,8 +387,9 @@ function promptNutrition(m, p) {
   return `You are a sports nutritionist. Create a 7-day meal plan based on InBody measured BMR. Return ONLY JSON.
 ${block} calorie_target=${calTarget}kcal diet_style=${styleDesc}
 IMPORTANT: Use InBody measured BMR=${m.basalMetabolicRate}kcal (not formula estimate). Protein target=${proteinG}g/day based on LBM.
-Return JSON (weeklyPlan must have 7 days Mon-Sun, all meals in Chinese food):
-{"bmrSource":"inbody_measured","basalMetabolicRate":${m.basalMetabolicRate},"tdee":${tdee},"dailyCalorieTarget":0,"macroSplit":{"protein":0,"carbs":0,"fat":0},"proteinTargetGrams":${proteinG},"weeklyPlan":[{"day":"周一","breakfast":{"name":"","foods":[""],"calories":0,"protein":0},"lunch":{"name":"","foods":[""],"calories":0,"protein":0},"dinner":{"name":"","foods":[""],"calories":0,"protein":0},"snack":{"name":"","foods":[""],"calories":0,"protein":0},"totalCalories":0}],"keyPrinciples":[""],"inBodyDataRationale":"","personalizedNote":""}`;
+STRICT REQUIREMENTS: weeklyPlan MUST contain EXACTLY 7 entries (Monday to Sunday). macroSplit values are PERCENTAGES (integer, must sum to 100, e.g. protein:30,carbs:45,fat:25). All meals in Chinese food.
+Return JSON:
+{"bmrSource":"inbody_measured","basalMetabolicRate":${m.basalMetabolicRate},"tdee":${tdee},"dailyCalorieTarget":0,"macroSplit":{"protein":30,"carbs":45,"fat":25},"proteinTargetGrams":${proteinG},"weeklyPlan":[{"day":"周一","breakfast":{"name":"","foods":[""],"calories":0,"protein":0},"lunch":{"name":"","foods":[""],"calories":0,"protein":0},"dinner":{"name":"","foods":[""],"calories":0,"protein":0},"snack":{"name":"","foods":[""],"calories":0,"protein":0},"totalCalories":0}],"keyPrinciples":[""],"inBodyDataRationale":"","personalizedNote":""}`;
 }
 
 function promptHydration(m, p) {
@@ -982,30 +985,30 @@ function NutritionResult({ data }) {
         ))}
       </div>
       <div style={{ marginBottom: 14 }}>
-        {[
-          {
-            label: `蛋白质 ${macro.protein || 0}%`,
-            val: macro.protein || 0,
-            color: C.sky,
-          },
-          {
-            label: `碳水 ${macro.carbs || 0}%`,
-            val: macro.carbs || 0,
-            color: C.emerald,
-          },
-          {
-            label: `脂肪 ${macro.fat || 0}%`,
-            val: macro.fat || 0,
-            color: C.amber,
-          },
-        ].map((m, i) => (
-          <div key={i} style={{ marginBottom: 8 }}>
-            <div style={{ fontSize: 12, color: C.textSub, marginBottom: 4 }}>
-              {m.label}
+        {(() => {
+          // macroSplit should be percentages (sum to 100)
+          // Defensive: if values look like grams (any > 100), recalculate from calories
+          const p = macro.protein || 0;
+          const c = macro.carbs || 0;
+          const f = macro.fat || 0;
+          const total = p + c + f;
+          const isGrams = total > 110; // percentages should sum to ~100
+          const pPct = isGrams ? Math.round((p * 4 / (p * 4 + c * 4 + f * 9)) * 100) : p;
+          const cPct = isGrams ? Math.round((c * 4 / (p * 4 + c * 4 + f * 9)) * 100) : c;
+          const fPct = isGrams ? Math.round((f * 9 / (p * 4 + c * 4 + f * 9)) * 100) : f;
+          return [
+            { label: `蛋白质 ${pPct}%`, val: pPct, color: C.sky },
+            { label: `碳水 ${cPct}%`, val: cPct, color: C.emerald },
+            { label: `脂肪 ${fPct}%`, val: fPct, color: C.amber },
+          ].map((m, i) => (
+            <div key={i} style={{ marginBottom: 8 }}>
+              <div style={{ fontSize: 12, color: C.textSub, marginBottom: 4 }}>
+                {m.label}
+              </div>
+              <Bar value={m.val} max={100} color={m.color} h={6} />
             </div>
-            <Bar value={m.val} max={100} color={m.color} h={6} />
-          </div>
-        ))}
+          ));
+        })()}
       </div>
       {data.weeklyPlan?.slice(0, 3).map((day, i) => (
         <div
@@ -2093,6 +2096,87 @@ function StepMeasurements({ state, onUpdate, onNext, onBack }) {
         )}
       </div>
 
+      {/* Data preview - shown when weight and BMR are filled */}
+      {m.weight > 0 && m.basalMetabolicRate > 0 && (
+        <div style={g({ padding: "20px 22px", marginTop: 20, border: `1px solid ${C.emerald}20` })}>
+          <div style={{ fontSize: 11, color: C.textMuted, letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 16 }}>
+            数据预览
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10, marginBottom: 16 }}>
+            {[
+              { label: "体重", val: m.weight, unit: "kg", color: C.text, icon: "⚖️" },
+              { label: "骨骼肌", val: m.skeletalMuscleMass, unit: "kg", color: C.emerald, icon: "💪" },
+              { label: "体脂率", val: m.bodyFatPercentage, unit: "%", color: C.amber, icon: "🔥" },
+              { label: "实测BMR", val: m.basalMetabolicRate, unit: "kcal", color: C.sky, icon: "⚡" },
+            ].map((item, i) => (
+              <div key={i} style={g({ padding: "12px 14px", border: `1px solid ${item.color}18`, textAlign: "center" })}>
+                <div style={{ fontSize: 15, marginBottom: 5 }}>{item.icon}</div>
+                <div style={{ fontSize: 18, fontWeight: 800, color: item.color, lineHeight: 1 }}>
+                  {item.val}<span style={{ fontSize: 10, fontWeight: 400, marginLeft: 2 }}>{item.unit}</span>
+                </div>
+                <div style={{ fontSize: 10, color: C.textMuted, marginTop: 3 }}>{item.label}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+            <div>
+              <div style={{ fontSize: 11, color: C.textMuted, marginBottom: 10 }}>体成分构成</div>
+              {[
+                { label: "骨骼肌量", val: m.skeletalMuscleMass, max: m.weight * 0.55, color: C.emerald },
+                { label: "体脂肪量", val: m.bodyFatMass, max: m.weight * 0.45, color: C.amber },
+                { label: "蛋白质", val: m.protein, max: 14, color: C.sky },
+                { label: "无机盐", val: m.minerals, max: 5, color: C.violet },
+              ].map((item, i) => (
+                <div key={i} style={{ marginBottom: 9 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
+                    <span style={{ fontSize: 11, color: C.textSub }}>{item.label}</span>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: item.color }}>{item.val} kg</span>
+                  </div>
+                  <Bar value={item.val} max={item.max} color={item.color} h={4} />
+                </div>
+              ))}
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, alignContent: "start" }}>
+              {m.inBodyScore > 0 && (
+                <div style={g({ padding: "12px", textAlign: "center", border: `1px solid ${C.emerald}18` })}>
+                  <div style={{ position: "relative", display: "inline-block" }}>
+                    <GaugeArc value={m.inBodyScore} max={100} color={C.emerald} size={72} />
+                    <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%,-46%)", textAlign: "center" }}>
+                      <div style={{ fontSize: 17, fontWeight: 800, color: C.emerald }}>{m.inBodyScore}</div>
+                    </div>
+                  </div>
+                  <div style={{ fontSize: 10, color: C.textMuted, marginTop: -2 }}>InBody 评分</div>
+                </div>
+              )}
+              {m.visceralFatLevel > 0 && (
+                <div style={g({ padding: "12px", textAlign: "center", border: `1px solid ${m.visceralFatLevel >= 10 ? C.rose : C.amber}18` })}>
+                  <div style={{ position: "relative", display: "inline-block" }}>
+                    <GaugeArc value={m.visceralFatLevel} max={20} color={m.visceralFatLevel >= 10 ? C.rose : C.amber} size={72} />
+                    <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%,-46%)", textAlign: "center" }}>
+                      <div style={{ fontSize: 17, fontWeight: 800, color: m.visceralFatLevel >= 10 ? C.rose : C.amber }}>{m.visceralFatLevel}</div>
+                    </div>
+                  </div>
+                  <div style={{ fontSize: 10, color: C.textMuted, marginTop: -2 }}>内脏脂肪</div>
+                </div>
+              )}
+              {m.segmentalLeanMass && m.segmentalLeanMass.trunk > 0 && (
+                <div style={g({ padding: "12px", border: `1px solid ${C.sky}18`, gridColumn: "1 / -1" })}>
+                  <div style={{ fontSize: 10, color: C.textMuted, marginBottom: 8 }}>节段骨骼肌</div>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 4 }}>
+                    {[["右臂","rightArm"],["左臂","leftArm"],["躯干","trunk"],["右腿","rightLeg"],["左腿","leftLeg"]].map(([l,k]) => (
+                      <div key={k} style={{ textAlign: "center" }}>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: C.sky }}>{m.segmentalLeanMass[k]}</div>
+                        <div style={{ fontSize: 9, color: C.textMuted }}>{l}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       <div style={{ display: "flex", gap: 10, marginTop: 20 }}>
         <button
           onClick={onBack}
@@ -2483,10 +2567,1570 @@ function StepProfile({ state, onUpdate, onNext, onBack }) {
 }
 
 // ══════════════════════════════════════════════════════════════
+//  BODY STATE ENGINE - local scoring
+// ══════════════════════════════════════════════════════════════
+function calcBodyState(m, p, checkin) {
+  if (!m || !m.weight) return null;
+
+  // ── BASELINE LAYER (40%) - slow variables from InBody ──
+  const smmIdeal = p.gender === "female" ? m.weight * 0.38 : m.weight * 0.45;
+  const smmRatio = m.skeletalMuscleMass / smmIdeal;
+  const smmScore = Math.min(100, Math.round(smmRatio * 80 + (smmRatio >= 1 ? 20 : 0)));
+  const bfIdeal = p.gender === "female" ? 22 : 15;
+  const bfDiff = Math.abs(m.bodyFatPercentage - bfIdeal);
+  const bfScore = Math.max(0, Math.round(100 - bfDiff * 4));
+  let hydScore = 80;
+  if (m.intracellularWater > 0) {
+    const ecwRatio = m.extracellularWater / (m.intracellularWater + m.extracellularWater);
+    if (ecwRatio < 0.36) hydScore = Math.round(60 + (ecwRatio / 0.36) * 20);
+    else if (ecwRatio <= 0.38) hydScore = 100;
+    else hydScore = Math.max(30, Math.round(100 - (ecwRatio - 0.38) * 500));
+  }
+  const vflScore = m.visceralFatLevel <= 4 ? 100
+    : m.visceralFatLevel <= 9 ? Math.round(100 - (m.visceralFatLevel - 4) * 8)
+    : Math.max(0, Math.round(60 - (m.visceralFatLevel - 9) * 6));
+  const bmrEst = p.gender === "female"
+    ? 10 * m.weight + 6.25 * p.heightCm - 5 * p.age - 161
+    : 10 * m.weight + 6.25 * p.heightCm - 5 * p.age + 5;
+  const bmrRatio = bmrEst > 0 ? m.basalMetabolicRate / bmrEst : 1;
+  const metScore = Math.min(100, Math.round(bmrRatio * 85 + (bmrRatio >= 1 ? 15 : 0)));
+  const baselineScore = Math.round(smmScore * 0.35 + bfScore * 0.30 + hydScore * 0.15 + vflScore * 0.12 + metScore * 0.08);
+
+  // ── RECOVERY LAYER (30%) - sleep / fatigue / soreness ──
+  const hasCheckin = checkin?.morningDone;
+  const mc = checkin?.morning || {};
+  let recoveryScore = 75; // default when no checkin
+  if (hasCheckin) {
+    const sleepMap = [30, 55, 75, 95, 85]; // <5h, 5-6h, 6-7h, 7-8h, >8h
+    const sleepS = mc.sleepDuration !== undefined ? sleepMap[mc.sleepDuration] : 75;
+    const qualityS = mc.sleepQuality ? mc.sleepQuality * 20 : 75;
+    const fatigueS = mc.fatigue ? Math.round((11 - mc.fatigue) * 10) : 75;
+    const sorenessS = mc.soreness ? Math.round((11 - mc.soreness) * 10) : 80;
+    recoveryScore = Math.round(sleepS * 0.35 + qualityS * 0.30 + fatigueS * 0.20 + sorenessS * 0.15);
+  }
+
+  // ── BEHAVIOR LAYER (20%) - nutrition / water / training ──
+  const ec = checkin?.evening || {};
+  let behaviorScore = 75;
+  if (checkin?.eveningDone) {
+    const proteinS = ec.proteinPct !== undefined ? ec.proteinPct : 70;
+    const waterTarget = 2000;
+    const waterS = ec.waterMl ? Math.min(100, Math.round((ec.waterMl / waterTarget) * 100)) : 70;
+    const trainingS = ec.training === "done" ? 100 : ec.training === "rest" ? 85 : 50;
+    behaviorScore = Math.round(proteinS * 0.40 + waterS * 0.30 + trainingS * 0.30);
+  }
+
+  // ── STRESS LAYER (10%) - stress / mood ──
+  let stressScore = 75;
+  if (hasCheckin && mc.stress) {
+    const stressS = Math.round((11 - mc.stress) * 10);
+    const moodS = ec.mood ? ec.mood * 20 : 70;
+    stressScore = Math.round(stressS * 0.65 + moodS * 0.35);
+  }
+
+  // ── FINAL WEIGHTED SCORE ──
+  const hasAnyCheckin = hasCheckin || checkin?.eveningDone;
+  const total = hasAnyCheckin
+    ? Math.round(baselineScore * 0.40 + recoveryScore * 0.30 + behaviorScore * 0.20 + stressScore * 0.10)
+    : Math.round(baselineScore * 0.85 + 75 * 0.15); // baseline-only when no checkin
+
+  // ── STATE LABEL - now considers fast variables too ──
+  const ecwR = m.intracellularWater > 0
+    ? m.extracellularWater / (m.intracellularWater + m.extracellularWater) : 0.37;
+  const isEdema = ecwR > 0.38;
+  const highFat = m.bodyFatPercentage > (p.gender === "female" ? 30 : 25);
+  const goodMuscle = smmRatio >= 0.95;
+  const highVFL = m.visceralFatLevel >= 10;
+  const tiredToday = hasCheckin && ((mc.fatigue || 0) >= 7 || (mc.soreness || 0) >= 7);
+  const badSleep = hasCheckin && mc.sleepDuration !== undefined && mc.sleepDuration <= 1;
+  const highStress = hasCheckin && (mc.stress || 0) >= 8;
+
+  let stateKey, stateIcon, stateColor, stateDesc, todayFocus, topAlert;
+  // Sleep debt accumulation: 2+ consecutive bad sleeps (check yesterday too)
+  const yesterdayKey = (() => { const d = new Date(); d.setDate(d.getDate()-1); return `checkin_${d.toISOString().slice(0,10)}`; })();
+  const yesterdayCheckin = (() => { try { const s = localStorage.getItem(yesterdayKey); return s ? JSON.parse(s) : null; } catch { return null; } })();
+  const yesterdayBadSleep = yesterdayCheckin?.morningDone && yesterdayCheckin?.morning?.sleepDuration !== undefined && yesterdayCheckin.morning.sleepDuration <= 1;
+  const sleepDebt = badSleep && yesterdayBadSleep;
+
+  if (highVFL || (highFat && isEdema)) {
+    stateKey = "need_attention"; stateIcon = "🔴"; stateColor = C.rose;
+    stateDesc = "代谢风险期";
+    todayFocus = `内脏脂肪 ${m.visceralFatLevel} 级，控制精制碳水，避免高强度训练`;
+    topAlert = "VFL 偏高会增加胰岛素抵抗和心血管风险";
+  } else if (sleepDebt) {
+    stateKey = "sleep_debt"; stateIcon = "🟠"; stateColor = "#fb923c";
+    stateDesc = "睡眠债累积";
+    todayFocus = "连续睡眠不足，今日以低强度拉伸为主，今晚提前入睡";
+    topAlert = "睡眠债会压制睾酮和生长激素，影响合成代谢";
+  } else if (badSleep) {
+    stateKey = "recovery_first"; stateIcon = "🟡"; stateColor = C.amber;
+    stateDesc = "轻度恢复不足";
+    todayFocus = `睡眠不足，避免高强度${(mc.soreness||0) >= 6 ? "下肢" : ""}训练，可做轻量有氧`;
+    topAlert = "睡眠不足时蛋白质合成效率下降约 20%";
+  } else if (tiredToday) {
+    stateKey = "recovery_first"; stateIcon = "🟡"; stateColor = C.amber;
+    stateDesc = `${(mc.soreness||0) >= 7 ? "肌肉恢复期" : "疲劳管理期"}`;
+    todayFocus = (mc.soreness||0) >= 7 ? "酸痛较高，建议泡沫轴放松或游泳，避免原肌群" : "疲劳值偏高，适合轻度有氧或休息";
+    topAlert = "过度训练会抑制肌肉生长，恢复即是进步";
+  } else if (highStress) {
+    stateKey = "stress_mode"; stateIcon = "🟡"; stateColor = C.amber;
+    stateDesc = "高压力模式";
+    todayFocus = "皮质醇偏高，选择瑜伽/慢跑，避免大重量训练";
+    topAlert = "高压力状态下强行训练会加速肌肉分解";
+  } else if (isEdema || (highFat && !goodMuscle)) {
+    stateKey = "fat_loss"; stateIcon = "🟡"; stateColor = C.amber;
+    stateDesc = isEdema ? "水分滞留期" : "减脂塑形期";
+    todayFocus = isEdema ? "减少钠摄入，保证 2L+ 饮水，有氧促循环" : "中等强度有氧 + 力量，控制餐后碳水时间";
+    topAlert = isEdema ? `ECW 比偏高，注意电解质平衡` : `体脂 ${m.bodyFatPercentage}%，增肌减脂并行效率最高`;
+  } else if (goodMuscle && !highFat && recoveryScore >= 75) {
+    stateKey = "muscle_window"; stateIcon = "🟢"; stateColor = C.emerald;
+    stateDesc = "增肌窗口";
+    todayFocus = "恢复充分，适合大重量复合动作，训练后 30min 补充蛋白质";
+    topAlert = "当前是突破训练记录的最佳时机";
+  } else if (goodMuscle && recoveryScore >= 60) {
+    stateKey = "maintain_build"; stateIcon = "🔵"; stateColor = C.sky;
+    stateDesc = "稳定进阶期";
+    todayFocus = "中等强度训练，注意蛋白质摄入，保持睡眠规律";
+    topAlert = "身体底子好，坚持一致性是核心";
+  } else {
+    stateKey = "maintain"; stateIcon = "🔵"; stateColor = C.sky;
+    stateDesc = "均衡维持期";
+    todayFocus = "均衡训练 + 维持热量平衡，重点提升肌肉量";
+    topAlert = "持续的一致性比任何单次训练都更重要";
+  }
+
+  const hasCheckinData = hasAnyCheckin;
+  return {
+    total, smmScore, bfScore, hydScore, vflScore, metScore,
+    recoveryScore, behaviorScore, stressScore, baselineScore,
+    stateKey, stateIcon, stateColor, stateDesc, todayFocus, topAlert,
+    hasCheckinData,
+  };
+}
+
+function promptBodyState(m, p, localScore, checkin) {
+  const { block } = buildDataBlock(m, p);
+  const mc = checkin?.morning || {};
+  const ec = checkin?.evening || {};
+  const sleepLabels = ["<5小时","5-6小时","6-7小时","7-8小时",">8小时"];
+  const checkinBlock = checkin?.morningDone || checkin?.eveningDone ? `
+Today's Check-in Data (FAST VARIABLES - prioritize these for today's recommendations):
+Morning: sleep=${mc.sleepDuration !== undefined ? sleepLabels[mc.sleepDuration] : "unknown"}, sleepQuality=${mc.sleepQuality || "unknown"}/5, fatigue=${mc.fatigue || "unknown"}/10, stress=${mc.stress || "unknown"}/10, soreness=${mc.soreness || "unknown"}/10${mc.weight ? `, weight=${mc.weight}kg` : ""}
+Evening: protein=${ec.proteinPct || "unknown"}% of target, water=${ec.waterMl || "unknown"}ml, training=${ec.training || "unknown"}, mood=${ec.mood || "unknown"}/5
+Pre-calculated layer scores: baseline=${localScore.baselineScore}, recovery=${localScore.recoveryScore}, behavior=${localScore.behaviorScore}, stress=${localScore.stressScore}` : `
+No check-in data available today. Base analysis on InBody data only.`;
+
+  return `You are an elite sports medicine doctor. Analyze this person's body state. Return ONLY JSON.
+${block}${checkinBlock}
+IMPORTANT: If check-in data is available, let fast variables (sleep, fatigue, stress) heavily influence your stateLabel and todayFocus. A person with great InBody scores but poor sleep should be labeled "恢复优先" not "增肌窗口".
+Return JSON:
+{"bodyScore":85,"stateLabel":"增肌窗口|减脂窗口|恢复优先|维持期|需要关注","stateEmoji":"🟢","stateColor":"emerald|amber|rose|sky","oneLiner":"一句话描述当前身体状态（20字以内）","todayFocus":"今天最应该做什么，包含✅❌具体行动（40字以内）","topAlert":"最需要关注的风险点（30字以内）","dimensionScores":{"muscle":85,"bodyFat":72,"hydration":90,"visceral":88,"metabolic":80},"aiInsight":"基于InBody+今日状态的深度洞察，150字","actionPlan":["立即行动（具体，基于今日数据）","本周重点（具体）","长期方向（具体）"],"recoveryTips":"基于今日恢复状态的具体建议"}`;
+}
+
+// ── CHECK-IN COMPONENTS ──────────────────────────────────────
+function SliderField({ label, value, min = 1, max = 10, color, onChange }) {
+  return (
+    <div style={{ marginBottom: 18 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
+        <span style={{ fontSize: 13, color: C.textSub }}>{label}</span>
+        <span style={{ fontSize: 16, fontWeight: 800, color }}>{value}</span>
+      </div>
+      <input type="range" min={min} max={max} value={value}
+        onChange={e => onChange(Number(e.target.value))}
+        style={{ width: "100%", accentColor: color, cursor: "pointer" }} />
+      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: C.textMuted, marginTop: 3 }}>
+        <span>{min}</span><span>{max}</span>
+      </div>
+    </div>
+  );
+}
+
+function MoodPicker({ value, onChange }) {
+  const moods = ["😫","😕","😐","🙂","😄"];
+  return (
+    <div style={{ display: "flex", gap: 8, justifyContent: "center", marginBottom: 18 }}>
+      {moods.map((m, i) => (
+        <button key={i} onClick={() => onChange(i + 1)}
+          style={{ fontSize: 26, padding: "8px 10px", borderRadius: 12, border: `2px solid ${value === i + 1 ? C.emerald : "transparent"}`, background: value === i + 1 ? C.emeraldDim : "transparent", cursor: "pointer", transition: "all .15s" }}>
+          {m}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function MorningCheckin({ checkin, onChange, onDone }) {
+  const c = checkin.morning || {};
+  const set = (k, v) => onChange({ ...checkin, morning: { ...c, [k]: v }, morningDone: true });
+  const sleepOpts = ["<5小时","5-6小时","6-7小时","7-8小时",">8小时"];
+  return (
+    <div>
+      <div style={{ marginBottom: 20 }}>
+        <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 10 }}>昨晚睡眠时长</div>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+          {sleepOpts.map((opt, i) => (
+            <button key={i} onClick={() => set("sleepDuration", i)}
+              style={{ padding: "7px 14px", borderRadius: 20, border: `1px solid ${c.sleepDuration === i ? C.sky + "80" : C.border}`, background: c.sleepDuration === i ? C.skyDim : "transparent", color: c.sleepDuration === i ? C.sky : C.textSub, fontSize: 12, cursor: "pointer" }}>
+              {opt}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div style={{ marginBottom: 6 }}>
+        <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 8 }}>睡眠质量</div>
+        <MoodPicker value={c.sleepQuality} onChange={v => set("sleepQuality", v)} />
+      </div>
+      <SliderField label="疲劳感" value={c.fatigue ?? 5} min={1} max={10} color={c.fatigue >= 7 ? C.rose : C.amber} onChange={v => set("fatigue", v)} />
+      <SliderField label="压力水平" value={c.stress ?? 5} min={1} max={10} color={c.stress >= 7 ? C.rose : C.violet} onChange={v => set("stress", v)} />
+      <SliderField label="肌肉酸痛" value={c.soreness ?? 3} min={1} max={10} color={c.soreness >= 7 ? C.rose : C.sky} onChange={v => set("soreness", v)} />
+      <div style={{ marginBottom: 20 }}>
+        <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 8 }}>今日体重（可选）</div>
+        <div style={{ position: "relative" }}>
+          <input type="number" placeholder="kg" value={c.weight || ""}
+            onChange={e => set("weight", e.target.value)}
+            style={{ width: "100%", padding: "10px 40px 10px 14px", background: "rgba(255,255,255,0.04)", border: `1px solid ${C.border}`, borderRadius: 10, color: C.text, fontSize: 14, outline: "none", boxSizing: "border-box", fontFamily: "inherit" }} />
+          <span style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", color: C.textMuted, fontSize: 12 }}>kg</span>
+        </div>
+      </div>
+      <button onClick={onDone} style={{ width: "100%", padding: "13px", borderRadius: 12, border: "none", background: `linear-gradient(135deg,${C.emerald},#059669)`, color: "#fff", fontSize: 15, fontWeight: 700, cursor: "pointer" }}>
+        完成 ✓
+      </button>
+    </div>
+  );
+}
+
+function EveningCheckin({ checkin, onChange, onDone }) {
+  const c = checkin.evening || {};
+  const set = (k, v) => onChange({ ...checkin, evening: { ...c, [k]: v }, eveningDone: true });
+  return (
+    <div>
+      <SliderField label="蛋白质完成度" value={c.proteinPct ?? 50} min={0} max={100} color={c.proteinPct >= 80 ? C.emerald : C.amber} onChange={v => set("proteinPct", v)} />
+      <div style={{ marginBottom: 18 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
+          <span style={{ fontSize: 13, color: C.textSub }}>今日饮水</span>
+          <span style={{ fontSize: 16, fontWeight: 800, color: C.sky }}>{c.waterMl ?? 1500} ml</span>
+        </div>
+        <input type="range" min={500} max={4000} step={100} value={c.waterMl ?? 1500}
+          onChange={e => set("waterMl", Number(e.target.value))}
+          style={{ width: "100%", accentColor: C.sky, cursor: "pointer" }} />
+        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: C.textMuted, marginTop: 3 }}>
+          <span>500ml</span><span>4000ml</span>
+        </div>
+      </div>
+      <div style={{ marginBottom: 18 }}>
+        <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 10 }}>今日训练</div>
+        <div style={{ display: "flex", gap: 8 }}>
+          {[["✅ 完成","done",C.emerald],["⏭ 跳过","skip",C.amber],["🛌 休息日","rest",C.sky]].map(([label, val, color]) => (
+            <button key={val} onClick={() => set("training", val)}
+              style={{ flex: 1, padding: "9px 8px", borderRadius: 12, border: `1px solid ${c.training === val ? color + "60" : C.border}`, background: c.training === val ? color + "18" : "transparent", color: c.training === val ? color : C.textSub, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div style={{ marginBottom: 20 }}>
+        <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 8 }}>今日心情</div>
+        <MoodPicker value={c.mood} onChange={v => set("mood", v)} />
+      </div>
+      <button onClick={onDone} style={{ width: "100%", padding: "13px", borderRadius: 12, border: "none", background: `linear-gradient(135deg,${C.emerald},#059669)`, color: "#fff", fontSize: 15, fontWeight: 700, cursor: "pointer" }}>
+        完成 ✓
+      </button>
+    </div>
+  );
+}
+
+// ── COMPLIANCE SCORE ─────────────────────────────────────────
+function calcComplianceScore(checkin) {
+  const mc = checkin?.morning || {};
+  const ec = checkin?.evening || {};
+  const morningDone = checkin?.morningDone;
+  const eveningDone = checkin?.eveningDone;
+
+  // Protein: from Nutrition page writeback OR evening check-in
+  // ec.proteinPct is written by Nutrition even without eveningDone
+  const proteinScore = ec.proteinPct !== undefined
+    ? Math.min(100, ec.proteinPct)
+    : null;
+
+  // Water: 25% - only from evening check-in
+  const waterTarget = 2000;
+  const waterScore = eveningDone && ec.waterMl !== undefined
+    ? Math.min(100, Math.round((ec.waterMl / waterTarget) * 100))
+    : null;
+
+  // Training: 25% - only from evening check-in
+  const trainingScore = eveningDone && ec.training
+    ? ec.training === "done" ? 100 : ec.training === "rest" ? 85 : 30
+    : null;
+
+  // Sleep: 20% - from morning check-in
+  const sleepScoreMap = [30, 55, 75, 100, 90];
+  const sleepScore = morningDone && mc.sleepDuration !== undefined
+    ? sleepScoreMap[mc.sleepDuration]
+    : null;
+
+  // Show card if we have at least one data point
+  const hasData = proteinScore !== null || waterScore !== null || trainingScore !== null || sleepScore !== null;
+  if (!hasData) return null;
+
+  const dims = [
+    { key: "protein", label: "蛋白质", weight: 0.30, score: proteinScore, color: "#10b981", icon: "P", unit: `${ec.proteinPct ?? "-"}%` },
+    { key: "water",   label: "饮水",   weight: 0.25, score: waterScore,   color: "#0ea5e9", icon: "W", unit: `${ec.waterMl ?? "-"}ml` },
+    { key: "training",label: "训练",   weight: 0.25, score: trainingScore, color: "#8b5cf6", icon: "T",
+      unit: ec.training === "done" ? "完成" : ec.training === "rest" ? "休息日" : "跳过" },
+    { key: "sleep",   label: "睡眠",   weight: 0.20, score: sleepScore,   color: "#f59e0b", icon: "Z",
+      unit: sleepScore !== null ? ["<5h","5-6h","6-7h","7-8h",">8h"][mc.sleepDuration] : "-" },
+  ];
+
+  // Weighted total - use 75 as fallback for missing dims
+  const total = Math.round(
+    dims.reduce((sum, d) => sum + (d.score !== null ? d.score : 75) * d.weight, 0)
+  );
+
+  const level = total >= 85 ? { label: "优秀执行", color: "#10b981", bg: "rgba(16,185,129,0.12)" }
+    : total >= 70 ? { label: "良好执行", color: "#0ea5e9", bg: "rgba(14,165,233,0.12)" }
+    : total >= 55 ? { label: "一般执行", color: "#f59e0b", bg: "rgba(245,158,11,0.12)" }
+    : { label: "需要改善", color: "#f43f5e", bg: "rgba(244,63,94,0.12)" };
+
+  return { total, dims, level };
+}
+
+function ComplianceCard({ checkin }) {
+  const result = calcComplianceScore(checkin);
+  if (!result) return null;
+  const { total, dims, level } = result;
+
+  // Yesterday's compliance for trend arrow
+  const yesterdayKey = (() => { const d = new Date(); d.setDate(d.getDate()-1); return `checkin_${d.toISOString().slice(0,10)}`; })();
+  const yesterdayTotal = (() => {
+    try {
+      const raw = localStorage.getItem(yesterdayKey);
+      if (!raw) return null;
+      const yc = JSON.parse(raw);
+      const yr = calcComplianceScore(yc);
+      return yr ? yr.total : null;
+    } catch { return null; }
+  })();
+  const trend = yesterdayTotal !== null ? total - yesterdayTotal : null;
+  const trendUp = trend !== null && trend > 0;
+  const trendFlat = trend !== null && trend === 0;
+
+  // Mini ring SVG
+  const Ring = ({ value, color, size = 48 }) => {
+    const r = (size - 8) / 2;
+    const circ = 2 * Math.PI * r;
+    const filled = (value / 100) * circ;
+    return (
+      <svg width={size} height={size} style={{ transform: "rotate(-90deg)" }}>
+        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="rgba(255,255,255,0.07)" strokeWidth={4} />
+        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={color} strokeWidth={4}
+          strokeDasharray={`${filled} ${circ}`} strokeLinecap="round"
+          style={{ transition: "stroke-dasharray 0.6s ease" }} />
+      </svg>
+    );
+  };
+
+  return (
+    <div style={{ ...g({ padding: "20px 24px", marginBottom: 16, border: `1px solid ${C.border}` }) }}>
+      {/* Header with trend */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+        <div>
+          <div style={{ fontSize: 11, color: C.textMuted, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 4 }}>Today Compliance</div>
+          <div style={{ fontSize: 15, fontWeight: 700, color: C.text }}>今日执行分</div>
+        </div>
+        <div style={{ textAlign: "right" }}>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 6, justifyContent: "flex-end" }}>
+            <div style={{ fontSize: 36, fontWeight: 900, color: level.color, lineHeight: 1 }}>{total}</div>
+            {trend !== null && !trendFlat && (
+              <div style={{ fontSize: 14, fontWeight: 800, color: trendUp ? C.emerald : C.rose }}>
+                {trendUp ? "↑" : "↓"}{Math.abs(trend)}
+              </div>
+            )}
+            {trendFlat && <div style={{ fontSize: 13, color: C.textMuted }}>—</div>}
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, justifyContent: "flex-end" }}>
+            <div style={{ fontSize: 11, color: level.color, padding: "2px 8px", background: level.bg, borderRadius: 20, display: "inline-block" }}>{level.label}</div>
+            {yesterdayTotal !== null && (
+              <div style={{ fontSize: 10, color: C.textMuted }}>昨天 {yesterdayTotal}</div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Main score bar */}
+      <div style={{ height: 5, borderRadius: 3, background: "rgba(255,255,255,0.06)", marginBottom: 20, overflow: "hidden" }}>
+        <div style={{ height: "100%", width: `${total}%`, background: `linear-gradient(90deg, ${level.color}80, ${level.color})`, borderRadius: 3, transition: "width 0.6s ease" }} />
+      </div>
+
+      {/* 4 Ring dims */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 8 }}>
+        {dims.map(d => {
+          const s = d.score !== null ? d.score : 0;
+          return (
+            <div key={d.key} style={{ background: "rgba(255,255,255,0.025)", borderRadius: 14, padding: "12px 8px", border: `1px solid rgba(255,255,255,0.05)`, textAlign: "center" }}>
+              <div style={{ position: "relative", display: "inline-flex", alignItems: "center", justifyContent: "center", marginBottom: 6 }}>
+                <Ring value={d.score !== null ? s : 0} color={d.score !== null ? d.color : "rgba(255,255,255,0.1)"} size={48} />
+                <div style={{ position: "absolute", fontSize: 11, fontWeight: 800, color: d.score !== null ? d.color : C.textMuted }}>
+                  {d.score !== null ? s : "-"}
+                </div>
+              </div>
+              <div style={{ fontSize: 11, color: C.textSub, fontWeight: 600, marginBottom: 2 }}>{d.label}</div>
+              <div style={{ fontSize: 10, color: C.textMuted }}>{d.score !== null ? d.unit : "未记录"}</div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div style={{ marginTop: 10, fontSize: 11, color: C.textMuted, textAlign: "center" }}>
+        蛋白质 30% + 饮水 25% + 训练 25% + 睡眠 20%
+      </div>
+    </div>
+  );
+}
+
+function CheckInCard({ checkin, onOpen }) {
+  const morningDone = checkin?.morningDone;
+  const eveningDone = checkin?.eveningDone;
+  const m = checkin?.morning || {};
+  const e = checkin?.evening || {};
+  const sleepLabels = ["<5小时","5-6小时","6-7小时","7-8小时",">8小时"];
+
+  return (
+    <div style={g({ padding: "20px 24px", marginBottom: 16, border: `1px solid ${C.border}` })}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+        <div>
+          <div style={{ fontSize: 11, color: C.textMuted, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 4 }}>Today Check-in</div>
+          <div style={{ fontSize: 15, fontWeight: 700, color: C.text }}>今日状态记录</div>
+        </div>
+        <div style={{ fontSize: 11, color: C.textMuted }}>
+          {morningDone && eveningDone ? "✓ 今日已完成" : morningDone ? "晨间 ✓  晚间 ○" : "晨间 ○  晚间 ○"}
+        </div>
+      </div>
+
+      {/* Summary if done */}
+      {morningDone && (
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
+          {m.sleepDuration !== undefined && <Tag color={C.sky}>睡眠 {sleepLabels[m.sleepDuration]}</Tag>}
+          {m.fatigue && <Tag color={m.fatigue >= 7 ? C.rose : C.amber}>疲劳 {m.fatigue}/10</Tag>}
+          {m.stress && <Tag color={m.stress >= 7 ? C.rose : C.violet}>压力 {m.stress}/10</Tag>}
+          {m.soreness && <Tag color={m.soreness >= 7 ? C.rose : C.sky}>酸痛 {m.soreness}/10</Tag>}
+          {eveningDone && e.training && <Tag color={C.emerald}>{e.training === "done" ? "训练 ✓" : e.training === "rest" ? "休息日" : "跳过"}</Tag>}
+          {eveningDone && e.waterMl && <Tag color={C.sky}>饮水 {e.waterMl}ml</Tag>}
+        </div>
+      )}
+
+      <div className="no-print" style={{ display: "flex", gap: 10 }}>
+        <button onClick={() => onOpen("morning")}
+          style={{ flex: 1, padding: "10px", borderRadius: 12, border: `1px solid ${morningDone ? C.emerald + "40" : C.border}`, background: morningDone ? C.emeraldDim : "rgba(255,255,255,0.03)", color: morningDone ? C.emerald : C.textSub, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
+          ☀️ 晨间 {morningDone ? "✓" : "Check-in"}
+        </button>
+        <button onClick={() => onOpen("evening")}
+          style={{ flex: 1, padding: "10px", borderRadius: 12, border: `1px solid ${eveningDone ? C.violet + "40" : C.border}`, background: eveningDone ? C.violetDim : "rgba(255,255,255,0.03)", color: eveningDone ? C.violet : C.textSub, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
+          🌙 晚间 {eveningDone ? "✓" : "Check-in"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── TODAY'S FOCUS ─────────────────────────────────────────────
+function calcTodayFocus(m, p, checkin, nutritionProtein, proteinTarget) {
+  if (!m || !m.weight) return [];
+  const mc = checkin?.morning || {};
+  const ec = checkin?.evening || {};
+  const items = [];
+
+  // Recovery priority: bad sleep or high fatigue
+  if (checkin?.morningDone) {
+    const sleepIdx = mc.sleepDuration ?? 2;
+    if (sleepIdx <= 1) items.push({ icon: "😴", color: "#0ea5e9", priority: "high", title: "恢复优先", desc: `睡眠不足，今日降低训练强度，补充碳水` });
+    else if (mc.fatigue >= 7) items.push({ icon: "⚡", color: "#f59e0b", priority: "high", title: "控制疲劳", desc: `疲劳度 ${mc.fatigue}/10，建议轻度训练或休息` });
+    else if (mc.soreness >= 7) items.push({ icon: "💆", color: "#8b5cf6", priority: "medium", title: "肌肉恢复", desc: `酸痛度 ${mc.soreness}/10，今日做拉伸或有氧` });
+  }
+
+  // Protein gap from Nutrition
+  if (nutritionProtein !== null && proteinTarget > 0) {
+    const gap = proteinTarget - nutritionProtein;
+    if (gap > proteinTarget * 0.5) items.push({ icon: "🥩", color: "#10b981", priority: "high", title: "补充蛋白质", desc: `今日还差 ${gap}g 蛋白，进入 Nutrition 记录` });
+    else if (gap > 20) items.push({ icon: "🥛", color: "#10b981", priority: "medium", title: "蛋白收尾", desc: `再补 ${gap}g 即达标，1勺蛋白粉或1盒希腊酸奶` });
+  } else if (nutritionProtein === null) {
+    items.push({ icon: "📋", color: "#10b981", priority: "medium", title: "记录今日饮食", desc: "还未记录，进入 Nutrition 开始追踪" });
+  }
+
+  // InBody-based structural focus
+  const bfIdeal = p.gender === "female" ? 22 : 15;
+  if (m.bodyFatPercentage > bfIdeal + 5) items.push({ icon: "🔥", color: "#f59e0b", priority: "medium", title: "热量控制", desc: `体脂 ${m.bodyFatPercentage}%，当前 TDEE 赤字有效` });
+  const smmIdeal = p.gender === "female" ? m.weight * 0.38 : m.weight * 0.45;
+  if (m.skeletalMuscleMass < smmIdeal * 0.92) items.push({ icon: "💪", color: "#8b5cf6", priority: "medium", title: "优先抗阻训练", desc: `肌肉量低于理想 ${Math.round((smmIdeal - m.skeletalMuscleMass) * 10) / 10}kg，今日安排力量` });
+  if (m.visceralFatLevel >= 10) items.push({ icon: "🫀", color: "#f43f5e", priority: "high", title: "内脏脂肪警戒", desc: `VFL ${m.visceralFatLevel}，有氧运动 + 控糖是首选` });
+
+  // ECW ratio hydration
+  if (m.intracellularWater > 0) {
+    const ecwR = m.extracellularWater / (m.intracellularWater + m.extracellularWater);
+    if (ecwR > 0.38) items.push({ icon: "💧", color: "#0ea5e9", priority: "medium", title: "注意水肿风险", desc: `ECW比 ${ecwR.toFixed(3)}，减少钠摄入，保证饮水` });
+  }
+
+  // Training done check
+  if (checkin?.eveningDone && ec.training === "skip") {
+    items.push({ icon: "⚠️", color: "#f59e0b", priority: "low", title: "今日未训练", desc: "明日补上或调整计划，保持一致性" });
+  }
+
+  // Sort: high first, max 3
+  const order = { high: 0, medium: 1, low: 2 };
+  return items.sort((a, b) => order[a.priority] - order[b.priority]).slice(0, 3);
+}
+
+function TodayFocusCard({ m, p, checkin, nutritionProtein, proteinTarget, onGoNutrition }) {
+  const items = calcTodayFocus(m, p, checkin, nutritionProtein, proteinTarget);
+  if (items.length === 0) return null;
+
+  return (
+    <div style={{ ...g({ padding: "20px 24px", marginBottom: 16, border: `1px solid ${C.border}` }) }}>
+      <div style={{ fontSize: 11, color: C.textMuted, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 14 }}>
+        Today's Focus · 今日重点
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        {items.map((it, i) => (
+          <div
+            key={i}
+            onClick={it.title.includes("蛋白") || it.title.includes("饮食") || it.title.includes("Nutrition") ? onGoNutrition : undefined}
+            style={{
+              display: "flex", alignItems: "center", gap: 12,
+              padding: "10px 14px", borderRadius: 12,
+              background: it.color + "0d", border: `1px solid ${it.color}22`,
+              cursor: (it.title.includes("蛋白") || it.title.includes("饮食") || it.title.includes("Nutrition")) ? "pointer" : "default",
+            }}
+          >
+            <div style={{ width: 34, height: 34, borderRadius: 10, background: it.color + "18", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, flexShrink: 0 }}>{it.icon}</div>
+            <div style={{ flex: 1 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 2 }}>
+                <span style={{ fontSize: 13, fontWeight: 700, color: C.text }}>{it.title}</span>
+                {it.priority === "high" && <span style={{ fontSize: 9, padding: "1px 6px", borderRadius: 6, background: "#f43f5e20", color: "#f43f5e", fontWeight: 700 }}>重要</span>}
+              </div>
+              <div style={{ fontSize: 12, color: C.textMuted }}>{it.desc}</div>
+            </div>
+            {(it.title.includes("蛋白") || it.title.includes("饮食") || it.title.includes("Nutrition")) && (
+              <div style={{ padding: "4px 10px", borderRadius: 8, background: it.color + "20", border: `1px solid ${it.color}40`, fontSize: 11, color: it.color, fontWeight: 700, whiteSpace: "nowrap" }}>去记录 {"->"}</div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── GOAL PROGRESS ─────────────────────────────────────────────
+function calcGoalProgress(m, p) {
+  if (!m || !m.weight) return null;
+  const goal = p.goal;
+  const gender = p.gender;
+
+  // Ideal targets based on goal
+  const idealBF = goal === "muscle_gain" ? (gender === "female" ? 20 : 12)
+    : goal === "weight_loss" ? (gender === "female" ? 22 : 15)
+    : (gender === "female" ? 22 : 15);
+  const idealSMM = gender === "female" ? m.weight * 0.38 : m.weight * 0.45;
+  const idealWeight = goal === "weight_loss"
+    ? Math.round((m.leanBodyMass / (1 - idealBF / 100)) * 10) / 10
+    : goal === "muscle_gain"
+    ? Math.round((m.weight + (idealSMM - m.skeletalMuscleMass)) * 10) / 10
+    : m.weight;
+
+  const bfGap = m.bodyFatPercentage - idealBF;
+  const smmGap = idealSMM - m.skeletalMuscleMass;
+  const weightGap = m.weight - idealWeight;
+
+  // Progress 0-100: how close to ideal
+  const bfProgress = Math.max(0, Math.min(100, Math.round(100 - Math.abs(bfGap) * 5)));
+  const smmProgress = Math.max(0, Math.min(100, Math.round((m.skeletalMuscleMass / idealSMM) * 100)));
+
+  // ETA calculation
+  const getETA = (gapKg, weeklyRateKg) => {
+    if (gapKg <= 0.3) return "已达标";
+    const weeks = Math.ceil(gapKg / weeklyRateKg);
+    const d = new Date();
+    d.setDate(d.getDate() + weeks * 7);
+    return `${d.getFullYear()}年${d.getMonth()+1}月预计达成`;
+  };
+  const bfWeeklyRate = goal === "weight_loss" ? 0.3 : 0.15; // % per week
+  const smmWeeklyRate = goal === "muscle_gain" ? 0.15 : 0.08; // kg per week
+  const bfETA = getETA(Math.max(0, bfGap), bfWeeklyRate);
+  const smmETA = getETA(Math.max(0, smmGap), smmWeeklyRate);
+  const weightETA = getETA(Math.abs(weightGap), 0.25);
+
+  const dims = [
+    {
+      label: "体脂率", current: `${m.bodyFatPercentage}%`, target: `${idealBF}%`,
+      gap: bfGap > 0.5 ? `-${bfGap.toFixed(1)}%` : bfGap < -0.5 ? `+${Math.abs(bfGap).toFixed(1)}%` : "达标 ✓",
+      progress: bfProgress, color: bfGap > 5 ? C.rose : bfGap > 2 ? C.amber : C.emerald,
+      note: bfGap > 0.5 ? "需减脂" : "已达标", eta: bfETA,
+    },
+    {
+      label: "肌肉量", current: `${m.skeletalMuscleMass}kg`, target: `${idealSMM.toFixed(1)}kg`,
+      gap: smmGap > 0.5 ? `+${smmGap.toFixed(1)}kg` : smmGap < -0.5 ? `-${Math.abs(smmGap).toFixed(1)}kg` : "达标 ✓",
+      progress: smmProgress, color: smmGap > 3 ? C.amber : smmGap > 1 ? C.sky : C.emerald,
+      note: smmGap > 0.5 ? "需增肌" : "已达标", eta: smmETA,
+    },
+    {
+      label: "目标体重", current: `${m.weight}kg`, target: `${idealWeight}kg`,
+      gap: Math.abs(weightGap) > 0.5 ? `${weightGap > 0 ? "-" : "+"}${Math.abs(weightGap).toFixed(1)}kg` : "达标 ✓",
+      progress: Math.max(0, Math.min(100, Math.round(100 - Math.abs(weightGap) * 3))),
+      color: Math.abs(weightGap) > 5 ? C.rose : Math.abs(weightGap) > 2 ? C.amber : C.emerald,
+      note: Math.abs(weightGap) > 1 ? "进行中" : "已达标", eta: weightETA,
+    },
+  ];
+
+  const overallProgress = Math.round((bfProgress + smmProgress) / 2);
+  return { dims, overallProgress, goal: GOAL_CN[goal] || goal };
+}
+
+function GoalProgressCard({ m, p }) {
+  const result = calcGoalProgress(m, p);
+  if (!result) return null;
+  const { dims, overallProgress, goal } = result;
+  const ringColor = overallProgress >= 80 ? C.emerald : overallProgress >= 60 ? C.sky : C.amber;
+
+  return (
+    <div style={{ ...g({ padding: "20px 24px", marginBottom: 16, border: `1px solid ${C.border}` }) }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}>
+        <div>
+          <div style={{ fontSize: 11, color: C.textMuted, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 4 }}>Goal Progress · 目标进度</div>
+          <div style={{ fontSize: 15, fontWeight: 700, color: C.text }}>{goal}</div>
+        </div>
+        <div style={{ position: "relative", width: 64, height: 64 }}>
+          <GaugeArc value={overallProgress} max={100} color={ringColor} size={64} />
+          <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%,-46%)", textAlign: "center" }}>
+            <div style={{ fontSize: 18, fontWeight: 900, color: ringColor, lineHeight: 1 }}>{overallProgress}</div>
+            <div style={{ fontSize: 8, color: C.textMuted }}>%</div>
+          </div>
+        </div>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 12 }}>
+        {dims.map(d => (
+          <div key={d.label} style={{ background: "rgba(255,255,255,0.03)", borderRadius: 12, padding: "12px 14px", border: `1px solid rgba(255,255,255,0.05)` }}>
+            <div style={{ fontSize: 11, color: C.textMuted, marginBottom: 6 }}>{d.label}</div>
+            <div style={{ fontSize: 15, fontWeight: 800, color: C.text, marginBottom: 2 }}>{d.current}</div>
+            <div style={{ height: 3, borderRadius: 2, background: "rgba(255,255,255,0.06)", overflow: "hidden", marginBottom: 6 }}>
+              <div style={{ height: "100%", width: `${d.progress}%`, background: d.color, borderRadius: 2, transition: "width 0.5s ease" }} />
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span style={{ fontSize: 10, color: C.textMuted }}>目标 {d.target}</span>
+              <span style={{ fontSize: 10, color: d.color, fontWeight: 700 }}>{d.gap}</span>
+            </div>
+            <div style={{ fontSize: 10, color: C.textMuted, marginTop: 5, paddingTop: 5, borderTop: `1px solid rgba(255,255,255,0.04)` }}>
+              {d.eta}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── CONSISTENCY ENGINE ───────────────────────────────────────
+function calcConsistency() {
+  const results = [];
+  for (let i = 0; i < 30; i++) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    const key = `checkin_${d.toISOString().slice(0, 10)}`;
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw) { results.push(null); continue; }
+      const ci = JSON.parse(raw);
+      const cr = calcComplianceScore(ci);
+      results.push(cr ? cr.total : null);
+    } catch { results.push(null); }
+  }
+
+  const scored = results.filter(x => x !== null);
+  const rate = scored.length > 0 ? Math.round((scored.length / 30) * 100) : 0;
+  const avg = scored.length > 0 ? Math.round(scored.reduce((a, b) => a + b, 0) / scored.length) : 0;
+
+  // Streak: count consecutive days from today
+  let streak = 0;
+  for (let i = 0; i < 30; i++) {
+    if (results[i] !== null && results[i] >= 50) streak++;
+    else break;
+  }
+
+  // Consistency grade
+  // New users (<7 days of data): grade purely on avg score, no rate penalty
+  // Established users (7+ days): weight both rate and avg
+  const isNewUser = scored.length < 7;
+  const grade = isNewUser
+    ? (avg >= 80 ? "A" : avg >= 65 ? "B" : avg >= 50 ? "C" : "D")
+    : (rate >= 80 && avg >= 75) ? "S"
+    : (rate >= 70 && avg >= 65) ? "A"
+    : (rate >= 55 && avg >= 55) ? "B"
+    : (rate >= 40) ? "C" : "D";
+
+  const gradeColor = grade === "S" ? "#10b981"
+    : grade === "A" ? "#0ea5e9"
+    : grade === "B" ? "#f59e0b"
+    : grade === "C" ? "#f97316" : "#f43f5e";
+
+  const gradeDesc = isNewUser
+    ? (avg >= 80 ? "优秀开局" : avg >= 65 ? "良好开局" : "建立习惯中")
+    : grade === "S" ? "卓越一致性" : grade === "A" ? "优秀一致性"
+    : grade === "B" ? "良好一致性" : grade === "C" ? "建立习惯中" : "需要提升";
+
+  // Last 14 days for mini heatmap
+  const heatmap = [];
+  for (let i = 13; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    const key = `checkin_${d.toISOString().slice(0, 10)}`;
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw) { heatmap.push(null); continue; }
+      const ci = JSON.parse(raw);
+      const cr = calcComplianceScore(ci);
+      heatmap.push(cr ? cr.total : null);
+    } catch { heatmap.push(null); }
+  }
+
+  return { streak, rate, avg, grade, gradeColor, gradeDesc, heatmap, scored, isNewUser };
+}
+
+function ConsistencyCard() {
+  const c = calcConsistency();
+  const { streak, rate, avg, grade, gradeColor, gradeDesc, heatmap, isNewUser, scored } = c;
+
+  return (
+    <div style={g({ padding: "20px 24px", marginBottom: 16, border: `1px solid ${C.border}` })}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 }}>
+        <div>
+          <div style={{ fontSize: 11, color: C.textMuted, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 4 }}>Consistency Engine</div>
+          <div style={{ fontSize: 15, fontWeight: 700, color: C.text }}>执行一致性</div>
+        </div>
+        {/* Grade badge */}
+        <div style={{ textAlign: "center" }}>
+          <div style={{ width: 48, height: 48, borderRadius: 14, background: gradeColor + "18", border: `2px solid ${gradeColor}40`, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 4 }}>
+            <span style={{ fontSize: 22, fontWeight: 900, color: gradeColor }}>{grade}</span>
+          </div>
+          <div style={{ fontSize: 9, color: gradeColor }}>{gradeDesc}</div>
+        </div>
+      </div>
+
+      {/* Stats row */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 16 }}>
+        <div style={{ background: "rgba(255,255,255,0.03)", borderRadius: 10, padding: "10px 12px", border: `1px solid rgba(255,255,255,0.05)`, textAlign: "center" }}>
+          <div style={{ fontSize: 20, fontWeight: 900, color: streak >= 7 ? "#f59e0b" : C.text, lineHeight: 1, marginBottom: 3 }}>
+            {streak >= 1 ? "🔥" : ""}{streak}
+          </div>
+          <div style={{ fontSize: 10, color: C.textMuted }}>连续天数</div>
+        </div>
+        <div style={{ background: "rgba(255,255,255,0.03)", borderRadius: 10, padding: "10px 12px", border: `1px solid rgba(255,255,255,0.05)`, textAlign: "center" }}>
+          <div style={{ fontSize: 20, fontWeight: 900, color: gradeColor, lineHeight: 1, marginBottom: 3 }}>{rate}%</div>
+          <div style={{ fontSize: 10, color: C.textMuted }}>30天执行率</div>
+        </div>
+        <div style={{ background: "rgba(255,255,255,0.03)", borderRadius: 10, padding: "10px 12px", border: `1px solid rgba(255,255,255,0.05)`, textAlign: "center" }}>
+          <div style={{ fontSize: 20, fontWeight: 900, color: C.sky, lineHeight: 1, marginBottom: 3 }}>{avg || "-"}</div>
+          <div style={{ fontSize: 10, color: C.textMuted }}>平均执行分</div>
+        </div>
+      </div>
+
+      {/* New user hint */}
+      {isNewUser && (
+        <div style={{ marginBottom: 14, padding: "8px 12px", borderRadius: 10, background: "rgba(14,165,233,0.08)", border: `1px solid rgba(14,165,233,0.2)`, fontSize: 11, color: C.sky }}>
+          📊 数据积累中（{scored.length}/7天）· 等级基于当前平均执行分，7天后切换完整算法
+        </div>
+      )}
+
+      {/* 14-day heatmap */}
+      <div>
+        <div style={{ fontSize: 10, color: C.textMuted, marginBottom: 6 }}>过去14天</div>
+        <div style={{ display: "flex", gap: 4 }}>
+          {heatmap.map((val, i) => {
+            const color = val === null ? "rgba(255,255,255,0.05)"
+              : val >= 85 ? "#10b981"
+              : val >= 70 ? "#0ea5e9"
+              : val >= 55 ? "#f59e0b"
+              : "#f43f5e";
+            return (
+              <div key={i} style={{ flex: 1, height: 24, borderRadius: 4, background: color, position: "relative" }}
+                title={val !== null ? `${val}分` : "未记录"}>
+                {val !== null && (
+                  <div style={{ position: "absolute", bottom: -14, left: "50%", transform: "translateX(-50%)", fontSize: 8, color: C.textMuted, whiteSpace: "nowrap" }}>
+                    {i === 13 ? "今" : i === 12 ? "昨" : ""}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 9, color: C.textMuted, marginTop: 18 }}>
+          <span>14天前</span>
+          <span style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <span>🟥低</span><span>🟨中</span><span>🟦良</span><span>🟩优</span>
+          </span>
+          <span>今天</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── DAILY REFLECTION ──────────────────────────────────────────
+function promptDailyReflection(todayScore, yesterdayScore, checkin, nutritionProtein, proteinTarget, consistency) {
+  const mc = checkin?.morning || {};
+  const ec = checkin?.evening || {};
+  const sleepLabels = ["<5h", "5-6h", "6-7h", "7-8h", ">8h"];
+  const diff = yesterdayScore !== null ? todayScore - yesterdayScore : null;
+  return `You are a warm, insightful personal health coach. Write a short Daily Reflection in Chinese for the user.
+Today's data:
+- Compliance score: ${todayScore}${diff !== null ? ` (${diff >= 0 ? "+" : ""}${diff} vs yesterday's ${yesterdayScore})` : ""}
+- Sleep: ${mc.sleepDuration !== undefined ? sleepLabels[mc.sleepDuration] : "unknown"}, quality ${mc.sleepQuality || "?"}/5
+- Fatigue: ${mc.fatigue || "?"}/10, Stress: ${mc.stress || "?"}/10, Soreness: ${mc.soreness || "?"}/10
+- Protein: ${nutritionProtein !== null ? `${nutritionProtein}g (${Math.round(nutritionProtein/proteinTarget*100)}% of ${proteinTarget}g target)` : "not tracked"}
+- Training: ${ec.training || "unknown"}, Water: ${ec.waterMl || "?"}ml, Mood: ${ec.mood || "?"}/5
+- Consistency: ${consistency.rate}% over 30 days, grade ${consistency.grade}, streak ${consistency.streak} days
+
+Write a Daily Reflection with 3 parts:
+1. Today summary (1-2 sentences, specific, mention actual numbers)
+2. One key insight (what's working or what's the main bottleneck)
+3. One concrete suggestion for tomorrow
+
+Tone: like a knowledgeable coach who genuinely cares, not a chatbot. Be specific, not generic.
+Return ONLY JSON:
+{"summary":"今天比昨天提高了8分...","insight":"蛋白质摄入明显改善...","tomorrow":"明天建议...","highlight":"一句话亮点（15字内）","mood":"positive|neutral|concern"}`;
+}
+
+function DailyReflectionCard({ checkin, todayCompliance, aiCfg, nutritionProtein, proteinTarget }) {
+  const [status, setStatus] = useState("idle");
+  const [result, setResult] = useState(() => {
+    try {
+      const key = `reflection_${new Date().toISOString().slice(0, 10)}`;
+      const raw = localStorage.getItem(key);
+      return raw ? JSON.parse(raw) : null;
+    } catch { return null; }
+  });
+  const [error, setError] = useState(null);
+
+  const consistency = calcConsistency();
+
+  const yesterdayCompliance = (() => {
+    try {
+      const d = new Date(); d.setDate(d.getDate() - 1);
+      const key = `checkin_${d.toISOString().slice(0, 10)}`;
+      const raw = localStorage.getItem(key);
+      if (!raw) return null;
+      const cr = calcComplianceScore(JSON.parse(raw));
+      return cr ? cr.total : null;
+    } catch { return null; }
+  })();
+
+  const generate = async () => {
+    if (!aiCfg.apiKey && aiCfg.provider !== "ollama") {
+      // Local fallback reflection
+      const diff = yesterdayCompliance !== null ? todayCompliance - yesterdayCompliance : null;
+      const localResult = {
+        summary: diff !== null
+          ? `今天执行分 ${todayCompliance}，${diff > 0 ? `比昨天提高了 ${diff} 分` : diff < 0 ? `比昨天下降了 ${Math.abs(diff)} 分` : "与昨天持平"}。`
+          : `今天执行分 ${todayCompliance}，${todayCompliance >= 80 ? "表现优秀" : todayCompliance >= 65 ? "执行良好" : "还有提升空间"}。`,
+        insight: nutritionProtein !== null
+          ? `蛋白质摄入 ${nutritionProtein}g，达成率 ${Math.round(nutritionProtein / proteinTarget * 100)}%。${nutritionProtein >= proteinTarget * 0.9 ? "蛋白目标完成得很好。" : "蛋白摄入是今日主要缺口。"}`
+          : "今日饮食暂未记录，建议明天开始使用 Nutrition 追踪。",
+        tomorrow: consistency.streak >= 3
+          ? `已连续 ${consistency.streak} 天达标，明天保持节奏。`
+          : "明天专注完成晨间 Check-in，让系统更准确地了解你的状态。",
+        highlight: todayCompliance >= 80 ? "今日表现优秀 🌟" : todayCompliance >= 65 ? "稳步前进 💪" : "明天会更好 ↑",
+        mood: todayCompliance >= 75 ? "positive" : todayCompliance >= 55 ? "neutral" : "concern",
+      };
+      setResult(localResult);
+      try { localStorage.setItem(`reflection_${new Date().toISOString().slice(0, 10)}`, JSON.stringify(localResult)); } catch {}
+      return;
+    }
+    setStatus("loading");
+    setError(null);
+    try {
+      const raw = await callTextAI(
+        promptDailyReflection(todayCompliance, yesterdayCompliance, checkin, nutritionProtein, proteinTarget, consistency),
+        aiCfg.provider, aiCfg.apiKey, aiCfg.modelName
+      );
+      const data = parseJSON(raw);
+      if (data?.summary) {
+        setResult(data);
+        setStatus("success");
+        try { localStorage.setItem(`reflection_${new Date().toISOString().slice(0, 10)}`, JSON.stringify(data)); } catch {}
+      } else { setError("解析失败，请重试"); setStatus("error"); }
+    } catch (e) { setError(String(e)); setStatus("error"); }
+  };
+
+  const moodColor = result?.mood === "positive" ? C.emerald : result?.mood === "concern" ? C.amber : C.sky;
+
+  return (
+    <div style={g({ padding: "20px 24px", marginBottom: 16, border: `1px solid ${result ? moodColor + "25" : C.border}`, position: "relative", overflow: "hidden" })}>
+      {result && <div style={{ position: "absolute", top: -40, right: -40, width: 140, height: 140, borderRadius: "50%", background: `radial-gradient(circle, ${moodColor}07, transparent 70%)`, pointerEvents: "none" }} />}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: result ? 16 : 0 }}>
+        <div>
+          <div style={{ fontSize: 11, color: C.textMuted, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 4 }}>Daily Reflection</div>
+          <div style={{ fontSize: 15, fontWeight: 700, color: C.text }}>今日回顾</div>
+        </div>
+        <div>
+          {!result && status === "idle" && (
+            <button onClick={generate} style={{ padding: "7px 16px", borderRadius: 20, border: `1px solid ${C.violet}40`, background: C.violetDim, color: C.violet, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+              {aiCfg.apiKey || aiCfg.provider === "ollama" ? "✦ AI 生成" : "生成回顾"}
+            </button>
+          )}
+          {status === "loading" && (
+            <div style={{ display: "flex", alignItems: "center", gap: 6, color: C.violet, fontSize: 12 }}>
+              <div style={{ width: 6, height: 6, borderRadius: "50%", background: C.violet, animation: "blink 1s infinite" }} />
+              思考中...
+            </div>
+          )}
+          {result && (
+            <button onClick={generate} style={{ padding: "5px 10px", borderRadius: 12, border: `1px solid ${C.border}`, background: "transparent", color: C.textMuted, fontSize: 11, cursor: "pointer" }}>
+              刷新
+            </button>
+          )}
+        </div>
+      </div>
+
+      {result && (
+        <div>
+          {/* Highlight pill */}
+          <div style={{ display: "inline-block", padding: "4px 12px", borderRadius: 20, background: moodColor + "15", border: `1px solid ${moodColor}30`, color: moodColor, fontSize: 12, fontWeight: 700, marginBottom: 14 }}>
+            {result.highlight}
+          </div>
+
+          {/* 3 reflection blocks */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            <div style={{ padding: "11px 14px", borderRadius: 12, background: "rgba(255,255,255,0.03)", borderLeft: `3px solid ${moodColor}` }}>
+              <div style={{ fontSize: 10, color: moodColor, fontWeight: 700, marginBottom: 5, textTransform: "uppercase", letterSpacing: "0.08em" }}>今日总结</div>
+              <div style={{ fontSize: 13, color: C.textSub, lineHeight: 1.6 }}>{result.summary}</div>
+            </div>
+            <div style={{ padding: "11px 14px", borderRadius: 12, background: "rgba(255,255,255,0.03)", borderLeft: `3px solid ${C.sky}` }}>
+              <div style={{ fontSize: 10, color: C.sky, fontWeight: 700, marginBottom: 5, textTransform: "uppercase", letterSpacing: "0.08em" }}>关键洞察</div>
+              <div style={{ fontSize: 13, color: C.textSub, lineHeight: 1.6 }}>{result.insight}</div>
+            </div>
+            <div style={{ padding: "11px 14px", borderRadius: 12, background: "rgba(255,255,255,0.03)", borderLeft: `3px solid ${C.emerald}` }}>
+              <div style={{ fontSize: 10, color: C.emerald, fontWeight: 700, marginBottom: 5, textTransform: "uppercase", letterSpacing: "0.08em" }}>明日建议</div>
+              <div style={{ fontSize: 13, color: C.textSub, lineHeight: 1.6 }}>{result.tomorrow}</div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {status === "error" && (
+        <div style={{ marginTop: 10, fontSize: 12, color: C.rose }}>⚠ {error}</div>
+      )}
+
+      {!result && status === "idle" && (
+        <div style={{ marginTop: 12, fontSize: 12, color: C.textMuted, lineHeight: 1.6 }}>
+          完成今日 Check-in 后生成个性化回顾，AI 会告诉你今天哪里做得好、明天怎么进步。
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── BODY STATE CARD ──────────────────────────────────────────
+function BodyStateCard({ state, localScore, aiScore, aiStatus, aiError, onGenerate }) {
+  const score = aiScore || localScore;
+  if (!score) return null;
+  const isAI = !!aiScore;
+  const scoreColor = score.total >= 80 ? C.emerald : score.total >= 60 ? C.sky : score.total >= 40 ? C.amber : C.rose;
+
+  // If checkin data available, show 4-layer breakdown; otherwise show 5 InBody dims
+  const dims = isAI
+    ? [
+        { label: "肌肉", val: score.dimensionScores?.muscle ?? score.smmScore, color: C.emerald },
+        { label: "体脂", val: score.dimensionScores?.bodyFat ?? score.bfScore, color: C.amber },
+        { label: "水分", val: score.dimensionScores?.hydration ?? score.hydScore, color: C.sky },
+        { label: "内脏", val: score.dimensionScores?.visceral ?? score.vflScore, color: C.rose },
+        { label: "代谢", val: score.dimensionScores?.metabolic ?? score.metScore, color: C.violet },
+      ]
+    : score.hasCheckinData
+    ? [
+        { label: "基础底子", val: score.baselineScore, color: C.emerald },
+        { label: "恢复状态", val: score.recoveryScore, color: C.sky },
+        { label: "行为执行", val: score.behaviorScore, color: C.amber },
+        { label: "压力心情", val: score.stressScore, color: C.violet },
+        { label: "综合", val: score.total, color: scoreColor },
+      ]
+    : [
+        { label: "肌肉", val: score.smmScore, color: C.emerald },
+        { label: "体脂", val: score.bfScore, color: C.amber },
+        { label: "水分", val: score.hydScore, color: C.sky },
+        { label: "内脏", val: score.vflScore, color: C.rose },
+        { label: "代谢", val: score.metScore, color: C.violet },
+      ];
+
+  return (
+    <div style={g({ padding: "24px", marginBottom: 20, border: `1px solid ${scoreColor}25`, position: "relative", overflow: "hidden" })}>
+      {/* bg glow */}
+      <div style={{ position: "absolute", top: -60, right: -60, width: 200, height: 200, borderRadius: "50%", background: `radial-gradient(circle, ${scoreColor}08 0%, transparent 70%)`, pointerEvents: "none" }} />
+
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 20 }}>
+        <div>
+          <div style={{ fontSize: 11, color: C.textMuted, letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 4 }}>
+            基础身体状态 · Baseline Body State {isAI && <span style={{ color: C.violet, marginLeft: 6 }}>· AI 精准模式</span>}
+          </div>
+          <div style={{ fontSize: 11, color: C.textMuted, marginBottom: 10, opacity: 0.6 }}>
+            基于 InBody 慢变量 · 非今日实时状态
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <div style={{ position: "relative", width: 90, height: 90 }}>
+              <GaugeArc value={score.total} max={100} color={scoreColor} size={90} />
+              <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%,-46%)", textAlign: "center" }}>
+                <div style={{ fontSize: 26, fontWeight: 800, color: scoreColor, lineHeight: 1 }}>{score.total}</div>
+                <div style={{ fontSize: 9, color: C.textMuted }}>Body Score</div>
+              </div>
+            </div>
+            <div>
+              <div style={{ fontSize: 22, marginBottom: 4 }}>
+                {isAI ? score.stateEmoji : score.stateIcon}
+                <span style={{ fontSize: 18, fontWeight: 700, color: isAI ? (score.stateColor === "emerald" ? C.emerald : score.stateColor === "amber" ? C.amber : score.stateColor === "rose" ? C.rose : C.sky) : score.stateColor, marginLeft: 8 }}>
+                  {isAI ? score.stateLabel : score.stateDesc}
+                </span>
+              </div>
+              <div style={{ fontSize: 13, color: C.textSub, maxWidth: 260, lineHeight: 1.5 }}>
+                {isAI ? score.oneLiner : score.topAlert}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="no-print">
+          {aiStatus === "idle" && (
+            <button onClick={onGenerate} style={{ padding: "7px 16px", borderRadius: 20, border: `1px solid ${C.violet}40`, background: C.violetDim, color: C.violet, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+              AI 精准分析
+            </button>
+          )}
+          {aiStatus === "loading" && (
+            <div style={{ display: "flex", alignItems: "center", gap: 6, color: C.violet, fontSize: 12 }}>
+              <div style={{ width: 6, height: 6, borderRadius: "50%", background: C.violet, animation: "blink 1s infinite" }} />
+              分析中...
+            </div>
+          )}
+          {aiStatus === "success" && (
+            <button onClick={onGenerate} style={{ padding: "5px 12px", borderRadius: 14, border: `1px solid ${C.border}`, background: "transparent", color: C.textMuted, fontSize: 11, cursor: "pointer" }}>
+              重新生成
+            </button>
+          )}
+          {aiStatus === "error" && (
+            <button onClick={onGenerate} style={{ padding: "5px 12px", borderRadius: 14, border: `1px solid ${C.rose}40`, background: C.roseDim, color: C.rose, fontSize: 11, cursor: "pointer" }}>
+              重试
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* 5 dimension bars */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 10, marginBottom: 18 }}>
+        {dims.map((d, i) => (
+          <div key={i} style={{ textAlign: "center" }}>
+            <div style={{ fontSize: 16, fontWeight: 800, color: d.color, marginBottom: 4 }}>{d.val}</div>
+            <Bar value={d.val} max={100} color={d.color} h={4} />
+            <div style={{ fontSize: 10, color: C.textMuted, marginTop: 4 }}>{d.label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Suggestion + alert */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+        <div style={{ padding: "12px 14px", borderRadius: 12, background: `${scoreColor}0f`, border: `1px solid ${scoreColor}20` }}>
+          <div style={{ fontSize: 10, color: scoreColor, fontWeight: 700, marginBottom: 5, textTransform: "uppercase", letterSpacing: "0.08em" }}>建议方向</div>
+          <div style={{ fontSize: 12, color: C.textSub, lineHeight: 1.6 }}>{isAI ? score.todayFocus : score.todayFocus}</div>
+        </div>
+        <div style={{ padding: "12px 14px", borderRadius: 12, background: "rgba(255,255,255,0.03)", border: `1px solid ${C.border}` }}>
+          <div style={{ fontSize: 10, color: C.textMuted, fontWeight: 700, marginBottom: 5, textTransform: "uppercase", letterSpacing: "0.08em" }}>关注点</div>
+          <div style={{ fontSize: 12, color: C.textSub, lineHeight: 1.6 }}>{isAI ? score.topAlert : score.topAlert}</div>
+        </div>
+      </div>
+
+      {/* AI insight (only in AI mode) */}
+      {isAI && score.aiInsight && (
+        <div style={{ marginTop: 12, padding: "12px 14px", borderRadius: 12, background: C.violetDim, border: `1px solid ${C.violet}20` }}>
+          <div style={{ fontSize: 10, color: C.violet, fontWeight: 700, marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.08em" }}>AI 深度洞察</div>
+          <div style={{ fontSize: 12, color: C.textSub, lineHeight: 1.7 }}>{score.aiInsight}</div>
+          {score.actionPlan?.length > 0 && (
+            <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 5 }}>
+              {score.actionPlan.map((a, i) => (
+                <Bullet key={i} color={[C.rose, C.amber, C.emerald][i] || C.emerald}>{a}</Bullet>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Nudge when no checkin */}
+      {!score.hasCheckinData && !isAI && (
+        <div style={{ marginTop: 12, padding: "10px 14px", borderRadius: 10, background: "rgba(255,255,255,0.03)", border: `1px solid ${C.border}`, display: "flex", alignItems: "center", gap: 10 }}>
+          <div style={{ fontSize: 18 }}>☀️</div>
+          <div style={{ fontSize: 12, color: C.textMuted, lineHeight: 1.5 }}>
+            完成今日晨间 Check-in 后，评分将加入睡眠、疲劳、压力等快变量，建议更准确
+          </div>
+        </div>
+      )}
+
+      {aiStatus === "error" && (
+        <div style={{ marginTop: 10, fontSize: 12, color: C.rose }}>{"⚠ "}{aiError}</div>
+      )}
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════
+//  NUTRITION PAGE
+// ══════════════════════════════════════════════════════════════
+
+const MEAL_KEYS = ["breakfast", "lunch", "dinner", "snack"];
+const MEAL_LABELS = { breakfast: "早餐", lunch: "午餐", dinner: "晚餐", snack: "加餐" };
+const MEAL_ICONS = { breakfast: "🌅", lunch: "☀️", dinner: "🌙", snack: "🥛" };
+const MEAL_COLORS = { breakfast: "#f59e0b", lunch: "#10b981", dinner: "#8b5cf6", snack: "#0ea5e9" };
+
+function promptFoodParse(input, proteinTarget, calTarget) {
+  return `You are a precise sports nutritionist. Parse this food description and return ONLY JSON with consistent values.
+CRITICAL: For the same food and weight, always return the same numbers. Use standard nutritional databases.
+Food input: "${input}"
+Protein target today: ${proteinTarget}g, Calorie target: ${calTarget}kcal
+
+Return ONLY this JSON (no markdown, no explanation):
+{"items":[{"name":"食物名","weight":"150g","protein":32,"carbs":0,"fat":3,"calories":165}],"total":{"protein":32,"carbs":0,"fat":3,"calories":165},"mealScore":82,"mealScoreNote":"蛋白质充足，低脂优质","proteinQuality":"high","proteinQualityNote":"优质动物蛋白，氨基酸完整"}`;
+}
+
+function promptGapAnalysis(todayTotals, targets) {
+  const gapProtein = Math.max(0, targets.protein - todayTotals.protein);
+  const gapCal = Math.max(0, targets.calories - todayTotals.calories);
+  return `You are a sports nutritionist. The user needs to close nutrition gaps today. Return ONLY JSON.
+Today so far: protein=${todayTotals.protein}g, calories=${todayTotals.calories}kcal, carbs=${todayTotals.carbs}g, fat=${todayTotals.fat}g
+Daily targets: protein=${targets.protein}g, calories=${targets.calories}kcal
+Gaps: protein=${gapProtein}g, calories=${gapCal}kcal
+
+Suggest 2-3 practical, easy food combinations to close the gap. Be specific with portions.
+Return ONLY this JSON:
+{"gapSummary":"今日还差X蛋白质，Y热量","suggestions":[{"emoji":"🥛","foods":"乳清蛋白1勺+希腊酸奶1盒","protein":41,"calories":320,"note":"最方便"},{"emoji":"🍗","foods":"鸡胸肉150g","protein":39,"calories":185,"note":"高性价比"}],"todayAdvice":"一句话今日建议"}`;
+}
+
+function NutritionMealCard({ mealKey, meal, onAdd, onRemove, onClear, proteinTarget, calTarget, aiCfg }) {
+  const [expanded, setExpanded] = useState(false);
+  const [inputMode, setInputMode] = useState("ai"); // "ai" | "manual"
+  const [aiInput, setAiInput] = useState("");
+  const [aiLoading, setAiLoading] = useState(false);
+  const [manualItem, setManualItem] = useState({ name: "", protein: "", carbs: "", fat: "", calories: "" });
+  const color = MEAL_COLORS[mealKey];
+  const items = meal?.items || [];
+  const total = items.reduce((acc, it) => ({
+    protein: acc.protein + (it.protein || 0),
+    carbs: acc.carbs + (it.carbs || 0),
+    fat: acc.fat + (it.fat || 0),
+    calories: acc.calories + (it.calories || 0),
+  }), { protein: 0, carbs: 0, fat: 0, calories: 0 });
+  // Round totals to avoid floating point accumulation
+  const totalRounded = {
+    protein: Math.round(total.protein * 10) / 10,
+    carbs: Math.round(total.carbs * 10) / 10,
+    fat: Math.round(total.fat * 10) / 10,
+    calories: Math.round(total.calories),
+  };
+
+  const handleAIParse = async () => {
+    if (!aiInput.trim()) return;
+    setAiLoading(true);
+    try {
+      const raw = await callTextAI(promptFoodParse(aiInput, proteinTarget, calTarget), aiCfg.provider, aiCfg.apiKey, aiCfg.modelName);
+      const data = parseJSON(raw);
+      if (data?.items) {
+        // Round all numeric values to avoid floating point display issues
+        const cleanItems = data.items.map(it => ({
+          ...it,
+          protein: Math.round((it.protein || 0) * 10) / 10,
+          carbs: Math.round((it.carbs || 0) * 10) / 10,
+          fat: Math.round((it.fat || 0) * 10) / 10,
+          calories: Math.round(it.calories || 0),
+        }));
+        onAdd(mealKey, cleanItems, data.mealScore, data.mealScoreNote, data.proteinQuality, data.proteinQualityNote);
+        setAiInput("");
+      }
+    } catch {}
+    setAiLoading(false);
+  };
+
+  const handleAIRescore = async () => {
+    if (items.length === 0) return;
+    setAiLoading(true);
+    const desc = items.map(it => `${it.name}${it.weight && it.weight !== "-" ? " " + it.weight : ""}`).join(" + ");
+    try {
+      const raw = await callTextAI(promptFoodParse(desc, proteinTarget, calTarget), aiCfg.provider, aiCfg.apiKey, aiCfg.modelName);
+      const data = parseJSON(raw);
+      if (data?.mealScore) {
+        onAdd(mealKey, [], data.mealScore, data.mealScoreNote, data.proteinQuality, data.proteinQualityNote);
+      }
+    } catch {}
+    setAiLoading(false);
+  };
+
+  const handleManualAdd = () => {
+    const it = {
+      name: manualItem.name || "自定义食物",
+      weight: "-",
+      protein: Number(manualItem.protein) || 0,
+      carbs: Number(manualItem.carbs) || 0,
+      fat: Number(manualItem.fat) || 0,
+      calories: Number(manualItem.calories) || 0,
+    };
+    onAdd(mealKey, [it], null, null, null, null);
+    setManualItem({ name: "", protein: "", carbs: "", fat: "", calories: "" });
+  };
+
+  return (
+    <div style={{ ...g({ padding: 0, marginBottom: 12, overflow: "hidden", border: `1px solid ${expanded ? color + "30" : C.border}` }), transition: "border-color 0.2s" }}>
+      {/* Header */}
+      <div onClick={() => setExpanded(!expanded)} style={{ padding: "16px 20px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <div style={{ width: 36, height: 36, borderRadius: 10, background: color + "18", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18 }}>{MEAL_ICONS[mealKey]}</div>
+          <div>
+            <div style={{ fontWeight: 700, fontSize: 14, color: C.text }}>{MEAL_LABELS[mealKey]}</div>
+            {items.length > 0 ? (
+              <div style={{ fontSize: 11, color: C.textMuted, marginTop: 2 }}>
+                {items.length}种食物 · {totalRounded.protein}g蛋白 · {totalRounded.calories}kcal
+              </div>
+            ) : (
+              <div style={{ fontSize: 11, color: C.textMuted, marginTop: 2 }}>未记录</div>
+            )}
+          </div>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          {meal?.mealScore && (
+            <div style={{ textAlign: "right" }}>
+              <div style={{ fontSize: 13, fontWeight: 800, color: meal.mealScore >= 80 ? C.emerald : meal.mealScore >= 60 ? C.amber : C.rose }}>
+                {meal.mealScore}分
+              </div>
+              {meal.mealScoreNote && (
+                <div style={{ fontSize: 9, color: C.textMuted, maxWidth: 90, lineHeight: 1.3 }}>{meal.mealScoreNote}</div>
+              )}
+            </div>
+          )}
+          {meal?.proteinQuality && (
+            <div style={{ textAlign: "right" }}>
+              <div style={{ fontSize: 10, padding: "2px 8px", borderRadius: 10, background: meal.proteinQuality === "high" ? C.emeraldDim : C.amberDim, color: meal.proteinQuality === "high" ? C.emerald : C.amber }}>
+                P{meal.proteinQuality === "high" ? "优" : meal.proteinQuality === "medium" ? "中" : "低"}
+              </div>
+              {meal.proteinQualityNote && (
+                <div style={{ fontSize: 9, color: C.textMuted, maxWidth: 70, lineHeight: 1.3, marginTop: 2 }}>{meal.proteinQualityNote}</div>
+              )}
+            </div>
+          )}
+          <div style={{ color: C.textMuted, fontSize: 12, transform: expanded ? "rotate(180deg)" : "none", transition: "transform 0.2s" }}>▾</div>
+        </div>
+      </div>
+
+      {/* Expanded content */}
+      {expanded && (
+        <div style={{ borderTop: `1px solid ${C.border}`, padding: "16px 20px" }}>
+          {/* Food items list */}
+          {items.length > 0 && (
+            <div style={{ marginBottom: 14 }}>
+              {items.map((it, idx) => (
+                <div key={idx} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: `1px solid rgba(255,255,255,0.04)` }}>
+                  <div>
+                    <span style={{ fontSize: 13, color: C.text, fontWeight: 600 }}>{it.name}</span>
+                    {it.weight && it.weight !== "-" && <span style={{ fontSize: 11, color: C.textMuted, marginLeft: 6 }}>{it.weight}</span>}
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                    <div style={{ fontSize: 11, color: C.textMuted }}>
+                      P<span style={{ color: C.emerald }}>{it.protein}g</span> C{it.carbs}g F{it.fat}g <span style={{ color: C.amber }}>{it.calories}kcal</span>
+                    </div>
+                    <button onClick={() => onRemove(mealKey, idx)} style={{ background: "none", border: "none", color: C.textMuted, cursor: "pointer", fontSize: 14, padding: "0 4px" }}>✕</button>
+                  </div>
+                </div>
+              ))}
+              {/* Meal total + actions */}
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingTop: 8 }}>
+                <div style={{ display: "flex", gap: 8 }}>
+                  {/* Re-score button */}
+                  <button onClick={handleAIRescore} disabled={aiLoading || items.length === 0} style={{ padding: "4px 10px", borderRadius: 8, border: `1px solid ${color}40`, background: color + "10", color: color, fontSize: 11, fontWeight: 600, cursor: items.length === 0 ? "not-allowed" : "pointer", opacity: items.length === 0 ? 0.4 : 1 }}>
+                    {aiLoading ? "评分中..." : "重新评分"}
+                  </button>
+                  {/* Clear all button */}
+                  <button onClick={() => onClear(mealKey)} style={{ padding: "4px 10px", borderRadius: 8, border: `1px solid rgba(244,63,94,0.3)`, background: "rgba(244,63,94,0.08)", color: C.rose, fontSize: 11, fontWeight: 600, cursor: "pointer" }}>
+                    清空本餐
+                  </button>
+                </div>
+                <div style={{ display: "flex", gap: 14, fontSize: 12, fontWeight: 700 }}>
+                  <span style={{ color: C.emerald }}>蛋白 {totalRounded.protein}g</span>
+                  <span style={{ color: C.textSub }}>碳水 {totalRounded.carbs}g</span>
+                  <span style={{ color: C.textSub }}>脂肪 {totalRounded.fat}g</span>
+                  <span style={{ color: C.amber }}>{totalRounded.calories}kcal</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Input mode tabs */}
+          <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
+            <button onClick={() => setInputMode("ai")} style={{ padding: "5px 14px", borderRadius: 20, border: `1px solid ${inputMode === "ai" ? color + "60" : C.border}`, background: inputMode === "ai" ? color + "15" : "transparent", color: inputMode === "ai" ? color : C.textMuted, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>AI 解析</button>
+            <button onClick={() => setInputMode("manual")} style={{ padding: "5px 14px", borderRadius: 20, border: `1px solid ${inputMode === "manual" ? color + "60" : C.border}`, background: inputMode === "manual" ? color + "15" : "transparent", color: inputMode === "manual" ? color : C.textMuted, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>手动输入</button>
+            <button onClick={() => {}} disabled style={{ padding: "5px 14px", borderRadius: 20, border: `1px solid ${C.border}`, background: "transparent", color: C.textMuted, fontSize: 12, cursor: "not-allowed", opacity: 0.4 }}>📷 拍照 Coming Soon</button>
+          </div>
+
+          {inputMode === "ai" ? (
+            <div style={{ display: "flex", gap: 8 }}>
+              <input
+                value={aiInput}
+                onChange={e => setAiInput(e.target.value)}
+                onKeyDown={e => e.key === "Enter" && handleAIParse()}
+                placeholder="例：鸡胸肉150g + 米饭200g + 西兰花100g"
+                style={{ flex: 1, padding: "9px 14px", borderRadius: 10, border: `1px solid ${C.border}`, background: "rgba(255,255,255,0.04)", color: C.text, fontSize: 13, outline: "none" }}
+              />
+              <button onClick={handleAIParse} disabled={aiLoading || !aiInput.trim()} style={{ padding: "9px 16px", borderRadius: 10, border: "none", background: aiLoading ? "rgba(255,255,255,0.05)" : color, color: aiLoading ? C.textMuted : "#fff", fontSize: 13, fontWeight: 700, cursor: aiLoading ? "not-allowed" : "pointer", whiteSpace: "nowrap" }}>
+                {aiLoading ? "解析中..." : "解析"}
+              </button>
+            </div>
+          ) : (
+            <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr 1fr auto", gap: 6 }}>
+              <input value={manualItem.name} onChange={e => setManualItem(s => ({ ...s, name: e.target.value }))} placeholder="食物名称" style={{ padding: "8px 10px", borderRadius: 8, border: `1px solid ${C.border}`, background: "rgba(255,255,255,0.04)", color: C.text, fontSize: 12, outline: "none" }} />
+              <input value={manualItem.protein} onChange={e => setManualItem(s => ({ ...s, protein: e.target.value }))} placeholder="蛋白g" type="number" style={{ padding: "8px 10px", borderRadius: 8, border: `1px solid ${C.border}`, background: "rgba(255,255,255,0.04)", color: C.text, fontSize: 12, outline: "none" }} />
+              <input value={manualItem.carbs} onChange={e => setManualItem(s => ({ ...s, carbs: e.target.value }))} placeholder="碳水g" type="number" style={{ padding: "8px 10px", borderRadius: 8, border: `1px solid ${C.border}`, background: "rgba(255,255,255,0.04)", color: C.text, fontSize: 12, outline: "none" }} />
+              <input value={manualItem.fat} onChange={e => setManualItem(s => ({ ...s, fat: e.target.value }))} placeholder="脂肪g" type="number" style={{ padding: "8px 10px", borderRadius: 8, border: `1px solid ${C.border}`, background: "rgba(255,255,255,0.04)", color: C.text, fontSize: 12, outline: "none" }} />
+              <input value={manualItem.calories} onChange={e => setManualItem(s => ({ ...s, calories: e.target.value }))} placeholder="热量" type="number" style={{ padding: "8px 10px", borderRadius: 8, border: `1px solid ${C.border}`, background: "rgba(255,255,255,0.04)", color: C.text, fontSize: 12, outline: "none" }} />
+              <button onClick={handleManualAdd} style={{ padding: "8px 12px", borderRadius: 8, border: "none", background: color, color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>+</button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function NutritionPage({ state, onBack }) {
+  const m = state.measurements;
+  const { tdee, proteinG } = buildDataBlock(m, state);
+  const calTarget = state.goal === "weight_loss" ? tdee - 300 : state.goal === "muscle_gain" ? tdee + 300 : tdee;
+  const targets = { protein: proteinG, calories: calTarget, carbs: Math.round((calTarget * 0.40) / 4), fat: Math.round((calTarget * 0.25) / 9) };
+
+  const todayKey = `nutrition_${new Date().toISOString().slice(0, 10)}`;
+  const checkinKey = `checkin_${new Date().toISOString().slice(0, 10)}`;
+  const targetsRef = useRef(targets);
+  targetsRef.current = targets;
+
+  const [meals, setMealsRaw] = useState(() => {
+    try { const s = localStorage.getItem(todayKey); return s ? JSON.parse(s) : {}; } catch { return {}; }
+  });
+
+  // Stable setMeals: persists to localStorage + syncs proteinPct to checkin (never forces eveningDone)
+  const setMeals = useCallback((updater) => {
+    setMealsRaw(prev => {
+      const next = typeof updater === "function" ? updater(prev) : updater;
+      try { localStorage.setItem(todayKey, JSON.stringify(next)); } catch {}
+      const allItems = Object.values(next).flatMap(meal => meal?.items || []);
+      const totalProtein = allItems.reduce((s, it) => s + (it.protein || 0), 0);
+      const pct = Math.min(100, Math.round((totalProtein / targetsRef.current.protein) * 100));
+      try {
+        const raw = localStorage.getItem(checkinKey);
+        const ci = raw ? JSON.parse(raw) : {};
+        const updated = { ...ci, evening: { ...(ci.evening || {}), proteinPct: pct } };
+        localStorage.setItem(checkinKey, JSON.stringify(updated));
+      } catch {}
+      return next;
+    });
+  }, [todayKey, checkinKey]);
+
+  const [gapResult, setGapResult] = useState(null);
+  const [gapLoading, setGapLoading] = useState(false);
+  const aiCfg = { provider: state.provider, apiKey: state.apiKey, modelName: state.modelName };
+
+  const allItems = Object.values(meals).flatMap(meal => meal?.items || []);
+  const todayTotals = allItems.reduce((acc, it) => ({
+    protein: acc.protein + (it.protein || 0),
+    carbs: acc.carbs + (it.carbs || 0),
+    fat: acc.fat + (it.fat || 0),
+    calories: acc.calories + (it.calories || 0),
+  }), { protein: 0, carbs: 0, fat: 0, calories: 0 });
+
+  const handleAddItems = (mealKey, items, mealScore, mealScoreNote, proteinQuality, proteinQualityNote) => {
+    setMeals(prev => ({
+      ...prev,
+      [mealKey]: {
+        // If items is empty, this is a rescore-only call — keep existing items
+        items: items.length > 0 ? [...(prev[mealKey]?.items || []), ...items] : (prev[mealKey]?.items || []),
+        mealScore: mealScore ?? prev[mealKey]?.mealScore,
+        mealScoreNote: mealScoreNote ?? prev[mealKey]?.mealScoreNote,
+        proteinQuality: proteinQuality ?? prev[mealKey]?.proteinQuality,
+        proteinQualityNote: proteinQualityNote ?? prev[mealKey]?.proteinQualityNote,
+      }
+    }));
+  };
+
+  const handleRemoveItem = (mealKey, idx) => {
+    setMeals(prev => {
+      const items = [...(prev[mealKey]?.items || [])];
+      items.splice(idx, 1);
+      return { ...prev, [mealKey]: { ...prev[mealKey], items } };
+    });
+  };
+
+  const handleClearMeal = (mealKey) => {
+    setMeals(prev => ({ ...prev, [mealKey]: { items: [], mealScore: null, mealScoreNote: null, proteinQuality: null, proteinQualityNote: null } }));
+  };
+
+  const fetchGap = async () => {
+    setGapLoading(true);
+    try {
+      const raw = await callTextAI(promptGapAnalysis(todayTotals, targets), aiCfg.provider, aiCfg.apiKey, aiCfg.modelName);
+      setGapResult(parseJSON(raw));
+    } catch {}
+    setGapLoading(false);
+  };
+
+  const proteinPct = Math.round((todayTotals.protein / targets.protein) * 100);
+  const calPct = Math.round((todayTotals.calories / targets.calories) * 100);
+  const carbPct = Math.round((todayTotals.carbs / targets.carbs) * 100);
+  const fatPct = Math.round((todayTotals.fat / targets.fat) * 100);
+
+  const macros = [
+    { label: "蛋白质", current: todayTotals.protein, target: targets.protein, pct: proteinPct, color: C.emerald, unit: "g" },
+    { label: "热量", current: todayTotals.calories, target: targets.calories, pct: calPct, color: C.amber, unit: "kcal" },
+    { label: "碳水", current: todayTotals.carbs, target: targets.carbs, pct: carbPct, color: C.sky, unit: "g" },
+    { label: "脂肪", current: todayTotals.fat, target: targets.fat, pct: fatPct, color: C.violet, unit: "g" },
+  ];
+
+  return (
+    <div style={{ maxWidth: 760, margin: "0 auto" }}>
+      {/* Header */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 28 }}>
+        <div>
+          <div style={{ fontSize: 11, letterSpacing: "0.15em", color: C.emerald, marginBottom: 6, textTransform: "uppercase" }}>Nutrition Tracker</div>
+          <h2 style={{ fontSize: 28, fontWeight: 800, color: C.text, margin: 0 }}>今日饮食</h2>
+          <div style={{ color: C.textMuted, fontSize: 13, marginTop: 4 }}>
+            {new Date().toLocaleDateString("zh-CN", { month: "long", day: "numeric", weekday: "short" })}
+          </div>
+        </div>
+        <button onClick={onBack} style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 16px", borderRadius: 12, border: `1px solid ${C.border}`, background: "rgba(255,255,255,0.04)", color: C.textSub, fontSize: 13, cursor: "pointer" }}>
+          {"<-"} Dashboard
+        </button>
+      </div>
+
+      {/* Macro Summary */}
+      <div style={g({ padding: "20px 24px", marginBottom: 16 })}>
+        <div style={{ fontSize: 11, color: C.textMuted, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 16 }}>Today Macros</div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16 }}>
+          {macros.map(mac => {
+            const over = mac.pct > 100;
+            const barColor = over ? (mac.label === "热量" || mac.label === "脂肪" ? C.rose : C.emerald) : mac.color;
+            return (
+            <div key={mac.label}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 6 }}>
+                <span style={{ fontSize: 12, color: C.textSub }}>{mac.label}</span>
+                <span style={{ fontSize: 11, color: over ? barColor : mac.color, fontWeight: 700 }}>
+                  {mac.pct}%{over && " ↑"}
+                </span>
+              </div>
+              <div style={{ height: 4, borderRadius: 2, background: "rgba(255,255,255,0.06)", overflow: "hidden", marginBottom: 6 }}>
+                <div style={{ height: "100%", width: `${Math.min(100, mac.pct)}%`, background: barColor, borderRadius: 2, transition: "width 0.4s ease" }} />
+              </div>
+              <div style={{ fontSize: 13, fontWeight: 800, color: C.text }}>{mac.current}<span style={{ fontSize: 10, color: C.textMuted, fontWeight: 400 }}>/{mac.target}{mac.unit}</span></div>
+            </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Gap Analysis */}
+      <div style={g({ padding: "16px 20px", marginBottom: 16, border: `1px solid ${C.border}` })}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: gapResult ? 14 : 0 }}>
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: C.text }}>Gap Analysis · 今日缺口</div>
+            <div style={{ fontSize: 11, color: C.textMuted, marginTop: 2 }}>
+              蛋白还差 <span style={{ color: C.emerald, fontWeight: 700 }}>{Math.max(0, targets.protein - todayTotals.protein)}g</span>
+              {" · "}热量还差 <span style={{ color: C.amber, fontWeight: 700 }}>{Math.max(0, targets.calories - todayTotals.calories)}kcal</span>
+            </div>
+          </div>
+          <button onClick={fetchGap} disabled={gapLoading} style={{ padding: "7px 14px", borderRadius: 20, border: `1px solid ${C.emerald}40`, background: C.emeraldDim, color: C.emerald, fontSize: 12, fontWeight: 700, cursor: gapLoading ? "not-allowed" : "pointer" }}>
+            {gapLoading ? "分析中..." : "AI 补充方案"}
+          </button>
+        </div>
+        {gapResult && (
+          <div style={{ marginTop: 14 }}>
+            <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 10 }}>{gapResult.gapSummary}</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {(gapResult.suggestions || []).map((s, i) => (
+                <div key={i} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", borderRadius: 12, background: "rgba(255,255,255,0.03)", border: `1px solid rgba(255,255,255,0.05)` }}>
+                  <span style={{ fontSize: 20 }}>{s.emoji}</span>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 13, color: C.text, fontWeight: 600 }}>{s.foods}</div>
+                    <div style={{ fontSize: 11, color: C.textMuted, marginTop: 2 }}>+{s.protein}g蛋白 · +{s.calories}kcal</div>
+                  </div>
+                  <div style={{ fontSize: 11, padding: "3px 8px", borderRadius: 8, background: C.emeraldDim, color: C.emerald }}>{s.note}</div>
+                </div>
+              ))}
+            </div>
+            {gapResult.todayAdvice && (
+              <div style={{ marginTop: 10, fontSize: 12, color: C.textSub, padding: "8px 12px", borderRadius: 8, background: "rgba(255,255,255,0.03)", borderLeft: `3px solid ${C.emerald}` }}>
+                {gapResult.todayAdvice}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Best / Worst Meal Award */}
+      {(() => {
+        const scored = MEAL_KEYS.map(k => ({ key: k, label: MEAL_LABELS[k], icon: MEAL_ICONS[k], score: meals[k]?.mealScore || null, color: MEAL_COLORS[k] })).filter(x => x.score !== null);
+        if (scored.length < 2) return null;
+        const best = scored.reduce((a, b) => a.score >= b.score ? a : b);
+        const worst = scored.reduce((a, b) => a.score <= b.score ? a : b);
+        if (best.key === worst.key) return null;
+        return (
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 12 }}>
+            <div style={{ ...g({ padding: "12px 16px", border: `1px solid ${C.emerald}25` }), background: C.emeraldDim }}>
+              <div style={{ fontSize: 10, color: C.emerald, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 6 }}>🏆 今日最佳餐</div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ fontSize: 20 }}>{best.icon}</span>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: C.text }}>{best.label}</div>
+                  <div style={{ fontSize: 11, color: C.emerald, fontWeight: 800 }}>{best.score} 分</div>
+                </div>
+              </div>
+            </div>
+            <div style={{ ...g({ padding: "12px 16px", border: `1px solid ${C.amber}25` }), background: C.amberDim }}>
+              <div style={{ fontSize: 10, color: C.amber, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 6 }}>⚠️ 最需改善</div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ fontSize: 20 }}>{worst.icon}</span>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: C.text }}>{worst.label}</div>
+                  <div style={{ fontSize: 11, color: C.amber, fontWeight: 800 }}>{worst.score} 分</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Meal Cards */}
+      <div style={{ marginBottom: 8 }}>
+        {MEAL_KEYS.map(key => (
+          <NutritionMealCard
+            key={key}
+            mealKey={key}
+            meal={meals[key]}
+            onAdd={handleAddItems}
+            onRemove={handleRemoveItem}
+            onClear={handleClearMeal}
+            proteinTarget={targets.protein}
+            calTarget={targets.calories}
+            aiCfg={aiCfg}
+          />
+        ))}
+      </div>
+
+      {/* Footer note */}
+      <div style={{ textAlign: "center", fontSize: 11, color: C.textMuted, marginTop: 8 }}>
+        饮食数据已自动同步到 Compliance Score · 蛋白达成率 {proteinPct}%
+      </div>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════
 //  DASHBOARD
 // ══════════════════════════════════════════════════════════════
-function Dashboard({ state, onReset }) {
+function Dashboard({ state, onReset, onBack, onNavigate }) {
   const m = state.measurements;
+  const [osTab, setOsTab] = useState("dashboard");
   const [moduleStates, setModuleStates] = useState({
     bodyComposition: "idle",
     workout: "idle",
@@ -2497,6 +4141,26 @@ function Dashboard({ state, onReset }) {
   const [moduleData, setModuleData] = useState({});
   const [moduleErrors, setModuleErrors] = useState({});
   const [genAll, setGenAll] = useState(false);
+  const [bodyStateAI, setBodyStateAI] = useState(null);
+  const [bodyStateStatus, setBodyStateStatus] = useState("idle");
+  const [bodyStateError, setBodyStateError] = useState(null);
+  const [checkinModal, setCheckinModal] = useState(null); // "morning" | "evening" | null
+  const todayKey = `checkin_${new Date().toISOString().slice(0,10)}`;
+  const [checkin, setCheckinRaw] = useState(() => {
+    try { const s = localStorage.getItem(todayKey); return s ? JSON.parse(s) : {}; } catch { return {}; }
+  });
+  const setCheckin = (val) => {
+    setCheckinRaw(val);
+    try { localStorage.setItem(todayKey, JSON.stringify(val)); } catch {}
+  };
+
+  // Re-read checkin from localStorage every time we return to dashboard tab
+  // (Nutrition page writes proteinPct directly to localStorage)
+  useEffect(() => {
+    try { const s = localStorage.getItem(todayKey); if (s) setCheckinRaw(JSON.parse(s)); } catch {}
+  }, [osTab, todayKey]);
+
+  const localScore = calcBodyState(m, state, checkin);
 
   const aiCfg = {
     provider: state.provider,
@@ -2582,6 +4246,26 @@ function Dashboard({ state, onReset }) {
     setGenAll(false);
   };
 
+  const generateBodyStateAI = async () => {
+    if (!localScore) return;
+    setBodyStateStatus("loading");
+    setBodyStateError(null);
+    try {
+      const raw = await callTextAI(
+        promptBodyState(m, state, localScore, checkin),
+        aiCfg.provider,
+        aiCfg.apiKey,
+        aiCfg.modelName,
+      );
+      const data = parseJSON(raw);
+      setBodyStateAI(data);
+      setBodyStateStatus("success");
+    } catch (err) {
+      setBodyStateError(err.message);
+      setBodyStateStatus("error");
+    }
+  };
+
   if (!m) return null;
 
   const tdee = Math.round(
@@ -2606,481 +4290,263 @@ function Dashboard({ state, onReset }) {
         ? C.amber
         : C.emerald;
 
+  // OS-level navigation tabs
+  const OS_TABS = [
+    { key: "dashboard", label: "Dashboard", icon: "⚡", active: true },
+    { key: "nutrition", label: "Nutrition", icon: "🥗", active: true },
+    { key: "training", label: "Training", icon: "💪", active: false },
+    { key: "recovery", label: "Recovery", icon: "🌙", active: false },
+    { key: "body", label: "Body Comp", icon: "📊", active: false },
+    { key: "reports", label: "Reports", icon: "📈", active: false },
+    { key: "settings", label: "Settings", icon: "⚙️", active: false },
+  ];
+
+  // Nutrition quick stats from localStorage
+  const nutritionKey = `nutrition_${new Date().toISOString().slice(0, 10)}`;
+  const nutritionTodayProtein = (() => {
+    try {
+      const raw = localStorage.getItem(nutritionKey);
+      if (!raw) return null;
+      const meals = JSON.parse(raw);
+      const items = Object.values(meals).flatMap(meal => meal?.items || []);
+      return items.reduce((s, it) => s + (it.protein || 0), 0);
+    } catch { return null; }
+  })();
+  const { proteinG: proteinTarget } = buildDataBlock(m, state);
+  const nutritionPct = nutritionTodayProtein !== null ? Math.min(100, Math.round((nutritionTodayProtein / proteinTarget) * 100)) : null;
+
+  if (osTab === "nutrition") {
+    return (
+      <div style={{ maxWidth: 920, margin: "0 auto" }}>
+        <style>{`@keyframes blink{0%,100%{opacity:1}50%{opacity:.2}}@media print{nav,.no-print{display:none!important}}`}</style>
+        <OsNav tabs={OS_TABS} active={osTab} onTab={setOsTab} onBack={onBack} />
+        <NutritionPage state={state} onBack={() => setOsTab("dashboard")} />
+      </div>
+    );
+  }
+
   return (
     <div style={{ maxWidth: 920, margin: "0 auto" }}>
       <style>{`
         @keyframes blink{0%,100%{opacity:1}50%{opacity:.2}}
         @keyframes slide{0%{width:0%;margin-left:0}50%{width:55%;margin-left:20%}100%{width:0%;margin-left:100%}}
         @keyframes up{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
+        @media print {
+          nav, .no-print { display: none !important; }
+          body { background: #fff !important; color: #000 !important; }
+          * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        }
       `}</style>
 
-      <div
-        style={{
-          display: "flex",
-          alignItems: "flex-start",
-          justifyContent: "space-between",
-          marginBottom: 28,
-        }}
-      >
+      {/* OS Navigation */}
+      <OsNav tabs={OS_TABS} active={osTab} onTab={setOsTab} onBack={onBack} />
+
+      {/* Dashboard Header */}
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 24 }}>
         <div>
-          <div
-            style={{
-              fontSize: 11,
-              letterSpacing: "0.2em",
-              color: C.emerald,
-              marginBottom: 8,
-              textTransform: "uppercase",
-            }}
-          >
-            InBody OS · 专业体成分分析
-          </div>
-          <h1
-            style={{
-              fontSize: 34,
-              fontWeight: 800,
-              color: C.text,
-              margin: 0,
-              lineHeight: 1.1,
-            }}
-          >
-            体成分方案
-          </h1>
-          <div style={{ color: C.textMuted, fontSize: 13, marginTop: 6 }}>
-            {state.age}岁 · {state.gender === "male" ? "男" : "女"} ·{" "}
-            {GOAL_CN[state.goal] || state.goal}
+          <div style={{ fontSize: 11, letterSpacing: "0.2em", color: C.emerald, marginBottom: 6, textTransform: "uppercase" }}>InBody OS · Dashboard</div>
+          <h1 style={{ fontSize: 28, fontWeight: 800, color: C.text, margin: 0, lineHeight: 1.1 }}>今日状态</h1>
+          <div style={{ color: C.textMuted, fontSize: 13, marginTop: 4 }}>
+            {state.age}岁 · {state.gender === "male" ? "男" : "女"} · {GOAL_CN[state.goal] || state.goal}
           </div>
         </div>
-
-        {/* 核心数据 */}
-        <div style={g({ padding: "26px", marginBottom: 20 })}></div>
-
-        <div style={{ display: "flex", gap: 10, flexShrink: 0 }}>
-          <button
-            onClick={generateAll}
-            disabled={genAll}
-            style={{
-              padding: "9px 18px",
-              borderRadius: 12,
-              border: "none",
-              background: genAll
-                ? "rgba(255,255,255,0.05)"
-                : `linear-gradient(135deg,${C.emerald},#059669)`,
-              color: genAll ? C.textMuted : "#fff",
-              fontSize: 13,
-              fontWeight: 700,
-              cursor: genAll ? "not-allowed" : "pointer",
-            }}
-          >
-            {genAll ? "生成中..." : "✦ 全部生成"}
-          </button>
-          <button
-            onClick={goBack}
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 6,
-              padding: "8px 16px",
-              borderRadius: 12,
-              border: `1px solid ${C.border}`,
-              background: "rgba(255,255,255,0.04)",
-              color: C.textSub,
-              fontSize: 13,
-              cursor: "pointer",
-            }}
-          >
-            {"<-"} 上一步
-          </button>
+        <div className="no-print" style={{ display: "flex", gap: 8 }}>
+          <button onClick={() => window.print()} style={{ padding: "7px 14px", borderRadius: 10, border: `1px solid ${C.border}`, background: "rgba(255,255,255,0.03)", color: C.textMuted, fontSize: 12, cursor: "pointer" }}>导出 PDF</button>
+          <button onClick={onBack} style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "7px 14px", borderRadius: 10, border: `1px solid ${C.border}`, background: "rgba(255,255,255,0.03)", color: C.textSub, fontSize: 12, cursor: "pointer" }}>{"<-"} 上一步</button>
         </div>
       </div>
 
-      {/* 核心数据 */}
-      <div style={g({ padding: "26px", marginBottom: 20 })}>
-        <div
-          style={{
-            fontSize: 11,
-            color: C.textMuted,
-            letterSpacing: "0.1em",
-            marginBottom: 18,
-            textTransform: "uppercase",
-          }}
-        >
-          InBody 核心数据
+      {/* Body State Engine */}
+      <BodyStateCard
+        state={state}
+        localScore={localScore}
+        aiScore={bodyStateAI}
+        aiStatus={bodyStateStatus}
+        aiError={bodyStateError}
+        onGenerate={generateBodyStateAI}
+      />
+
+      {/* Today Check-in */}
+      <CheckInCard checkin={checkin} onOpen={setCheckinModal} />
+
+      {/* Compliance Score */}
+      <ComplianceCard checkin={checkin} />
+
+      {/* Today's Focus */}
+      <TodayFocusCard
+        m={m}
+        p={state}
+        checkin={checkin}
+        nutritionProtein={nutritionTodayProtein}
+        proteinTarget={proteinTarget}
+        onGoNutrition={() => setOsTab("nutrition")}
+      />
+
+      {/* Goal Progress */}
+      <GoalProgressCard m={m} p={state} />
+
+      {/* Consistency Engine */}
+      <ConsistencyCard />
+
+      {/* Daily Reflection */}
+      <DailyReflectionCard
+        checkin={checkin}
+        todayCompliance={(() => { const r = calcComplianceScore(checkin); return r ? r.total : 0; })()}
+        aiCfg={{ provider: state.provider, apiKey: state.apiKey, modelName: state.modelName }}
+        nutritionProtein={nutritionTodayProtein}
+        proteinTarget={proteinTarget}
+      />
+
+      {/* Module entry cards */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 16 }}>
+        {/* Nutrition entry - prominent with gap urgency */}
+        {(() => {
+          const hasGap = nutritionTodayProtein !== null && (proteinTarget - nutritionTodayProtein) > 20;
+          const notStarted = nutritionTodayProtein === null;
+          const borderColor = hasGap ? `${C.amber}50` : `${C.emerald}40`;
+          const bgColor = hasGap ? C.amberDim : C.emeraldDim;
+          const accentColor = hasGap ? C.amber : C.emerald;
+          return (
+            <button onClick={() => setOsTab("nutrition")} style={{ ...g({ padding: "16px 18px", border: `1px solid ${borderColor}`, cursor: "pointer", textAlign: "left" }), background: bgColor, position: "relative", overflow: "hidden" }}>
+              {/* Glow effect */}
+              <div style={{ position: "absolute", top: -20, right: -20, width: 80, height: 80, borderRadius: "50%", background: `radial-gradient(circle, ${accentColor}15, transparent 70%)`, pointerEvents: "none" }} />
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
+                <div style={{ fontSize: 22 }}>🥗</div>
+                <div style={{ fontSize: 10, padding: "3px 8px", borderRadius: 8, background: accentColor + "20", color: accentColor, border: `1px solid ${accentColor}40`, fontWeight: 700 }}>
+                  {notStarted ? "开始记录" : hasGap ? "需要补充" : "已达标 ✓"}
+                </div>
+              </div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: C.text, marginBottom: 4 }}>Nutrition</div>
+              {notStarted ? (
+                <div style={{ fontSize: 11, color: C.textMuted }}>今日尚未记录饮食</div>
+              ) : (
+                <>
+                  <div style={{ fontSize: 11, color: accentColor, fontWeight: 700, marginBottom: 2 }}>
+                    蛋白 {nutritionTodayProtein}g / {proteinTarget}g
+                  </div>
+                  <div style={{ height: 3, borderRadius: 2, background: "rgba(255,255,255,0.08)", overflow: "hidden" }}>
+                    <div style={{ height: "100%", width: `${nutritionPct}%`, background: accentColor, borderRadius: 2 }} />
+                  </div>
+                  {hasGap && (
+                    <div style={{ fontSize: 10, color: C.amber, marginTop: 4 }}>
+                      还差 {proteinTarget - nutritionTodayProtein}g 蛋白 →
+                    </div>
+                  )}
+                </>
+              )}
+            </button>
+          );
+        })()}
+
+        {/* Training - coming soon */}
+        <div style={g({ padding: "16px 18px", border: `1px solid ${C.border}`, opacity: 0.5 })}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
+            <div style={{ fontSize: 20 }}>💪</div>
+            <div style={{ fontSize: 10, padding: "2px 7px", borderRadius: 6, background: "rgba(255,255,255,0.05)", color: C.textMuted }}>Coming Soon</div>
+          </div>
+          <div style={{ fontSize: 13, fontWeight: 700, color: C.text, marginBottom: 4 }}>Training</div>
+          <div style={{ fontSize: 11, color: C.textMuted }}>运动记录 · 消耗追踪</div>
         </div>
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(4,1fr)",
-            gap: 12,
-            marginBottom: 24,
-          }}
-        >
-          {[
-            {
-              label: "体重",
-              val: m.weight,
-              unit: "kg",
-              color: C.text,
-              icon: "⚖️",
-            },
-            {
-              label: "骨骼肌量",
-              val: m.skeletalMuscleMass,
-              unit: "kg",
-              color: C.emerald,
-              icon: "💪",
-            },
-            {
-              label: "体脂率",
-              val: `${m.bodyFatPercentage}%`,
-              unit: "",
-              color: C.amber,
-              icon: "🔥",
-            },
-            {
-              label: "实测 BMR",
-              val: m.basalMetabolicRate,
-              unit: "kcal",
-              color: C.sky,
-              icon: "⚡",
-            },
-          ].map((item, i) => (
-            <div
-              key={i}
-              style={g({
-                padding: "16px 18px",
-                border: `1px solid ${item.color}18`,
-                animation: `up .4s ease ${i * 0.07}s both`,
-              })}
+
+        {/* Recovery - coming soon */}
+        <div style={g({ padding: "16px 18px", border: `1px solid ${C.border}`, opacity: 0.5 })}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
+            <div style={{ fontSize: 20 }}>🌙</div>
+            <div style={{ fontSize: 10, padding: "2px 7px", borderRadius: 6, background: "rgba(255,255,255,0.05)", color: C.textMuted }}>Coming Soon</div>
+          </div>
+          <div style={{ fontSize: 13, fontWeight: 700, color: C.text, marginBottom: 4 }}>Recovery</div>
+          <div style={{ fontSize: 11, color: C.textMuted }}>睡眠 · 疲劳 · 恢复</div>
+        </div>
+      </div>
+
+      {/* AI Analysis modules (collapsed by default) */}
+      <div style={{ marginBottom: 16 }}>
+        <div style={{ fontSize: 11, color: C.textMuted, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 10 }}>AI 分析模块</div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          {MODULES.map((mod) => (
+            <ModuleCard
+              key={mod.key}
+              title={mod.title}
+              icon={mod.icon}
+              color={mod.color}
+              dim={mod.dim}
+              status={moduleStates[mod.key]}
+              error={moduleErrors[mod.key]}
+              onGenerate={() => generate(mod.key)}
             >
-              <div style={{ fontSize: 18, marginBottom: 7 }}>{item.icon}</div>
-              <div
-                style={{
-                  fontSize: 22,
-                  fontWeight: 800,
-                  color: item.color,
-                  lineHeight: 1,
-                }}
-              >
-                {item.val}
-                <span style={{ fontSize: 11, fontWeight: 400, marginLeft: 2 }}>
-                  {item.unit}
-                </span>
-              </div>
-              <div style={{ fontSize: 11, color: C.textMuted, marginTop: 4 }}>
-                {item.label}
-              </div>
-            </div>
+              {mod.render(moduleData[mod.key])}
+            </ModuleCard>
           ))}
         </div>
+      </div>
 
-        <div
-          style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 22 }}
-        >
-          <div>
-            <div style={{ fontSize: 11, color: C.textMuted, marginBottom: 12 }}>
-              体成分构成
+      {/* Footer */}
+      <div style={g({ padding: "12px 20px", display: "flex", justifyContent: "space-between", alignItems: "center", border: `1px solid ${C.emerald}18` })}>
+        <div style={{ fontSize: 11, color: C.textMuted }}>
+          基于 <span style={{ color: C.emerald }}>InBody 实测数据</span> 驱动 · 非公式估算
+        </div>
+        <div style={{ display: "flex", gap: 10, fontSize: 11, color: C.textMuted }}>
+          <span>BMR <span style={{ color: C.sky }}>{m.basalMetabolicRate}</span></span>
+          <span>SMM <span style={{ color: C.emerald }}>{m.skeletalMuscleMass}</span></span>
+          <span>VFL <span style={{ color: vColor }}>{m.visceralFatLevel}</span></span>
+        </div>
+      </div>
+
+      {/* Check-in Modal */}
+      {checkinModal && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", backdropFilter: "blur(8px)", zIndex: 999, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+          <div style={g({ padding: "28px", maxWidth: 480, width: "100%", maxHeight: "90vh", overflowY: "auto", border: `1px solid ${C.border}` })}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 22 }}>
+              <div>
+                <div style={{ fontSize: 11, color: C.textMuted, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 4 }}>
+                  {checkinModal === "morning" ? "晨间" : "晚间"} Check-in
+                </div>
+                <div style={{ fontSize: 20, fontWeight: 800, color: C.text }}>
+                  {checkinModal === "morning" ? "☀️ 早上好" : "🌙 今天怎么样"}
+                </div>
+              </div>
+              <button onClick={() => setCheckinModal(null)} style={{ background: "none", border: "none", color: C.textMuted, fontSize: 20, cursor: "pointer" }}>✕</button>
             </div>
-            {[
-              {
-                label: "骨骼肌量",
-                val: m.skeletalMuscleMass,
-                max: m.weight * 0.55,
-                color: C.emerald,
-              },
-              {
-                label: "体脂肪量",
-                val: m.bodyFatMass,
-                max: m.weight * 0.45,
-                color: C.amber,
-              },
-              { label: "蛋白质", val: m.protein, max: 14, color: C.sky },
-              { label: "无机盐", val: m.minerals, max: 5, color: C.violet },
-            ].map((item, i) => (
-              <div key={i} style={{ marginBottom: 11 }}>
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    marginBottom: 4,
-                  }}
-                >
-                  <span style={{ fontSize: 12, color: C.textSub }}>
-                    {item.label}
-                  </span>
-                  <span
-                    style={{ fontSize: 13, fontWeight: 700, color: item.color }}
-                  >
-                    {item.val} kg
-                  </span>
-                </div>
-                <Bar value={item.val} max={item.max} color={item.color} />
-              </div>
-            ))}
-          </div>
-          <div
-            style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}
-          >
-            {m.inBodyScore > 0 && (
-              <div
-                style={g({
-                  padding: "14px",
-                  textAlign: "center",
-                  border: `1px solid ${C.emerald}18`,
-                })}
-              >
-                <div style={{ position: "relative", display: "inline-block" }}>
-                  <GaugeArc
-                    value={m.inBodyScore}
-                    max={100}
-                    color={C.emerald}
-                    size={82}
-                  />
-                  <div
-                    style={{
-                      position: "absolute",
-                      top: "50%",
-                      left: "50%",
-                      transform: "translate(-50%,-46%)",
-                      textAlign: "center",
-                    }}
-                  >
-                    <div
-                      style={{
-                        fontSize: 20,
-                        fontWeight: 800,
-                        color: C.emerald,
-                      }}
-                    >
-                      {m.inBodyScore}
-                    </div>
-                  </div>
-                </div>
-                <div
-                  style={{ fontSize: 11, color: C.textMuted, marginTop: -2 }}
-                >
-                  InBody 评分
-                </div>
-              </div>
+            {checkinModal === "morning" ? (
+              <MorningCheckin checkin={checkin} onChange={setCheckin} onDone={() => setCheckinModal(null)} />
+            ) : (
+              <EveningCheckin checkin={checkin} onChange={setCheckin} onDone={() => setCheckinModal(null)} />
             )}
-            <div
-              style={g({
-                padding: "14px",
-                textAlign: "center",
-                border: `1px solid ${vColor}18`,
-              })}
-            >
-              <div style={{ position: "relative", display: "inline-block" }}>
-                <GaugeArc
-                  value={m.visceralFatLevel}
-                  max={20}
-                  color={vColor}
-                  size={82}
-                />
-                <div
-                  style={{
-                    position: "absolute",
-                    top: "50%",
-                    left: "50%",
-                    transform: "translate(-50%,-46%)",
-                    textAlign: "center",
-                  }}
-                >
-                  <div style={{ fontSize: 20, fontWeight: 800, color: vColor }}>
-                    {m.visceralFatLevel}
-                  </div>
-                </div>
-              </div>
-              <div style={{ fontSize: 11, color: C.textMuted, marginTop: -2 }}>
-                内脏脂肪等级
-              </div>
-            </div>
-            <div style={g({ padding: "12px", border: `1px solid ${C.sky}18` })}>
-              <div
-                style={{ fontSize: 10, color: C.textMuted, marginBottom: 5 }}
-              >
-                ECW/TBW
-              </div>
-              <div
-                style={{
-                  fontSize: 18,
-                  fontWeight: 800,
-                  color: parseFloat(ecwRatio) >= 0.38 ? C.amber : C.sky,
-                }}
-              >
-                {ecwRatio}
-              </div>
-              <div style={{ fontSize: 10, color: C.textMuted, marginTop: 3 }}>
-                {parseFloat(ecwRatio) >= 0.38 ? "⚠ 水肿" : "✓ 正常"}
-              </div>
-            </div>
-            <div
-              style={g({ padding: "12px", border: `1px solid ${C.emerald}18` })}
-            >
-              <div
-                style={{ fontSize: 10, color: C.textMuted, marginBottom: 5 }}
-              >
-                TDEE
-              </div>
-              <div style={{ fontSize: 18, fontWeight: 800, color: C.emerald }}>
-                {tdee}
-              </div>
-              <div style={{ fontSize: 10, color: C.textMuted, marginTop: 3 }}>
-                kcal/天
-              </div>
-            </div>
           </div>
         </div>
+      )}
+    </div>
+  );
+}
 
-        {m.segmentalLeanMass && (
-          <div
+// ── OS NAVIGATION BAR ─────────────────────────────────────────
+function OsNav({ tabs, active, onTab, onBack }) {
+  return (
+    <div className="no-print" style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 24, paddingBottom: 16, borderBottom: `1px solid ${C.border}`, overflowX: "auto" }}>
+      {tabs.map(tab => {
+        const isActive = active === tab.key;
+        const isAvailable = tab.active;
+        return (
+          <button
+            key={tab.key}
+            onClick={() => isAvailable && onTab(tab.key)}
             style={{
-              marginTop: 22,
-              paddingTop: 18,
-              borderTop: `1px solid ${C.border}`,
+              display: "inline-flex", alignItems: "center", gap: 5,
+              padding: "6px 14px", borderRadius: 20, whiteSpace: "nowrap",
+              border: `1px solid ${isActive ? C.emerald + "50" : isAvailable ? C.border : "rgba(255,255,255,0.04)"}`,
+              background: isActive ? C.emeraldDim : "transparent",
+              color: isActive ? C.emerald : isAvailable ? C.textSub : C.textMuted,
+              fontSize: 12, fontWeight: isActive ? 700 : 500,
+              cursor: isAvailable ? "pointer" : "not-allowed",
+              opacity: isAvailable ? 1 : 0.45,
             }}
           >
-            <div style={{ fontSize: 11, color: C.textMuted, marginBottom: 12 }}>
-              节段骨骼肌分布
-            </div>
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(5,1fr)",
-                gap: 8,
-              }}
-            >
-              {[
-                ["右臂", "rightArm"],
-                ["左臂", "leftArm"],
-                ["躯干", "trunk"],
-                ["右腿", "rightLeg"],
-                ["左腿", "leftLeg"],
-              ].map(([l, k]) => (
-                <div
-                  key={k}
-                  style={g({
-                    padding: "12px",
-                    textAlign: "center",
-                    border: `1px solid ${C.sky}15`,
-                  })}
-                >
-                  <div style={{ fontSize: 17, fontWeight: 700, color: C.sky }}>
-                    {m.segmentalLeanMass[k]}
-                  </div>
-                  <div
-                    style={{ fontSize: 9, color: C.textMuted, margin: "2px 0" }}
-                  >
-                    kg
-                  </div>
-                  <div style={{ fontSize: 11, color: C.textSub }}>{l}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* 6个模块 */}
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "1fr 1fr",
-          gap: 16,
-          marginBottom: 20,
-        }}
-      >
-        {MODULES.map((mod) => (
-          <ModuleCard
-            key={mod.key}
-            title={mod.title}
-            icon={mod.icon}
-            color={mod.color}
-            dim={mod.dim}
-            status={moduleStates[mod.key]}
-            error={moduleErrors[mod.key]}
-            onGenerate={() => generate(mod.key)}
-          >
-            {mod.render(moduleData[mod.key])}
-          </ModuleCard>
-        ))}
-        <div
-          style={g({ border: `1px solid ${C.violetDim}`, overflow: "hidden" })}
-        >
-          <div
-            style={{
-              padding: "18px 22px 14px",
-              borderBottom: `1px solid ${C.border}`,
-              display: "flex",
-              alignItems: "center",
-              gap: 10,
-            }}
-          >
-            <div
-              style={{
-                width: 34,
-                height: 34,
-                borderRadius: 10,
-                background: C.violetDim,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                fontSize: 17,
-              }}
-            >
-              📈
-            </div>
-            <span style={{ color: C.text, fontWeight: 700, fontSize: 15 }}>
-              进度追踪
-            </span>
-            <Tag color={C.violet}>下次检测后开启</Tag>
-          </div>
-          <div style={{ padding: "28px 22px", textAlign: "center" }}>
-            <div style={{ fontSize: 32, opacity: 0.22, marginBottom: 12 }}>
-              📊
-            </div>
-            <div style={{ color: C.textSub, fontSize: 14, marginBottom: 8 }}>
-              上传第二份 InBody 截图后可用
-            </div>
-            <div style={{ fontSize: 12, color: C.textMuted }}>
-              自动对比体成分变化趋势
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div
-        style={g({
-          padding: "14px 22px",
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          border: `1px solid ${C.emerald}18`,
-        })}
-      >
-        <div style={{ fontSize: 12, color: C.textMuted }}>
-          基于 <span style={{ color: C.emerald }}>InBody 实测数据</span> 驱动 ·
-          非公式估算
-        </div>
-        <div
-          style={{ display: "flex", gap: 12, fontSize: 11, color: C.textMuted }}
-        >
-          <span>
-            BMR <span style={{ color: C.sky }}>{m.basalMetabolicRate}</span>
-          </span>
-          <span>·</span>
-          <span>
-            SMM <span style={{ color: C.emerald }}>{m.skeletalMuscleMass}</span>
-          </span>
-          <span>·</span>
-          <span>
-            VFL <span style={{ color: vColor }}>{m.visceralFatLevel}</span>
-          </span>
-          <span>·</span>
-          <span>
-            AI <span style={{ color: C.violet }}>{state.provider}</span>
-          </span>
-        </div>
-      </div>
+            <span>{tab.icon}</span>
+            <span>{tab.label}</span>
+            {!isAvailable && <span style={{ fontSize: 9, opacity: 0.7 }}>Soon</span>}
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -3146,7 +4612,27 @@ const INIT = {
 };
 
 export default function InBodyOS() {
-  const [state, setState] = useState(INIT);
+  const [state, setState] = useState(() => {
+    if (typeof window === "undefined") return INIT;
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        // Always start from welcome on page load for clean UX
+        return { ...INIT, ...parsed, step: "welcome" };
+      }
+    } catch {}
+    return INIT;
+  });
+
+  // Persist state to localStorage whenever it changes (skip imageFile which can't be serialized)
+  useEffect(() => {
+    try {
+      const toSave = { ...state, imageFile: null };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave));
+    } catch {}
+  }, [state]);
+
   const update = (key, val) => setState((s) => ({ ...s, [key]: val }));
   const go = (step) => setState((s) => ({ ...s, step }));
   const goBack = () => {
@@ -3380,7 +4866,7 @@ export default function InBodyOS() {
           />
         )}
         {state.step === "dashboard" && (
-          <Dashboard state={state} onReset={() => setState(INIT)} />
+          <Dashboard state={state} onReset={() => { setState(INIT); localStorage.removeItem(STORAGE_KEY); }} onBack={goBack} />
         )}
       </div>
     </div>
