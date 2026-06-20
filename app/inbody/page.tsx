@@ -61,44 +61,15 @@ const INIT: AppState = {
 
 // ── ROOT ──────────────────────────────────────────────────────
 export default function InBodyOS() {
-<<<<<<< HEAD
-  const [state, setState] = useState(() => {
-    if (typeof window === "undefined") return INIT;
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        // Always start from welcome on page load for clean UX
-        return { ...INIT, ...parsed, step: "welcome" };
-      }
-=======
   const [state, setState] = useState<AppState>(() => {
     if (typeof window === "undefined") return INIT;
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) return { ...INIT, ...JSON.parse(saved), step: "welcome" };
->>>>>>> 9c968ca (Personal Body OS - Alpha ready)
     } catch {}
     return INIT;
   });
 
-<<<<<<< HEAD
-  // Persist state to localStorage whenever it changes (skip imageFile which can't be serialized)
-  useEffect(() => {
-    try {
-      const toSave = { ...state, imageFile: null };
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave));
-    } catch {}
-  }, [state]);
-
-  const update = (key, val) => setState((s) => ({ ...s, [key]: val }));
-  const go = (step) => setState((s) => ({ ...s, step }));
-  const goBack = () => {
-    const steps = ["welcome", "import", "measurements", "profile", "dashboard"];
-    const idx = steps.indexOf(state.step);
-    if (idx > 0) go(steps[idx - 1]);
-  };
-=======
   useEffect(() => {
     try {
       localStorage.setItem(
@@ -130,7 +101,6 @@ export default function InBodyOS() {
     { icon: "🌍", title: "国内直连", sub: "Qwen-VL 无需 VPN" },
   ];
 
->>>>>>> 9c968ca (Personal Body OS - Alpha ready)
   return (
     <div
       style={{
