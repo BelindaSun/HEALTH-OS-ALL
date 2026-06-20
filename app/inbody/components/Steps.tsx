@@ -231,7 +231,7 @@ export function StepImport({ state, onUpdate, onNext }: {
             没有也没关系，直接点下方按钮手动填写三个核心数字即可。
           </div>
           <div style={{ fontSize: 11, color: C.textSub, marginTop: 6 }}>
-            如需配置 API Key：我的档案 → 高级设置
+            如要配置 API Key：我的档案 （最后一页） → 高级设置
           </div>
         </div>
       )}
@@ -439,7 +439,7 @@ export function StepMeasurements({ state, onUpdate, onNext, onBack }: {
         </button>
         <button onClick={onNext} disabled={!m.weight || !m.basalMetabolicRate}
           style={{ flex: 1, padding: "13px", borderRadius: 12, border: "none", background: m.weight && m.basalMetabolicRate ? `linear-gradient(135deg,${C.emerald},#059669)` : "rgba(255,255,255,0.05)", color: m.weight && m.basalMetabolicRate ? "#fff" : C.textMuted, fontSize: 15, fontWeight: 700, cursor: m.weight && m.basalMetabolicRate ? "pointer" : "not-allowed" }}>
-          {m.weight && m.basalMetabolicRate ? "填写基础信息 ->" : "请至少填写体重和BMR"}
+          {m.weight && m.basalMetabolicRate ? "进入Dashboard ->" : "请至少填写体重和BMR"}
         </button>
       </div>
     </div>
