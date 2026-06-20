@@ -190,7 +190,7 @@ export function StepImport({ state, onUpdate, onNext }: {
       <div style={{ textAlign: "center", marginBottom: 32 }}>
         <div style={{ fontSize: 12, letterSpacing: "0.2em", color: C.emerald, marginBottom: 10, textTransform: "uppercase" }}>01 / 02</div>
         <h2 style={{ fontSize: 30, fontWeight: 800, color: C.text, margin: 0 }}>上传 InBody 截图</h2>
-        <p style={{ color: C.textMuted, fontSize: 13, marginTop: 8 }}>拍照或截图你的 InBody 报告，AI 自动识别所有数值</p>
+        <p style={{ color: C.textSub, fontSize: 13, marginTop: 8 }}>拍照或截图你的 InBody 报告，AI 自动识别所有数值</p>
       </div>
 
       {/* Upload zone */}
@@ -225,11 +225,13 @@ export function StepImport({ state, onUpdate, onNext }: {
 
       {/* AI识别区 — 引擎配置在"我的档案 > 高级设置"里 */}
       {(!state.visionApiKey && state.visionProvider !== "ollama") && (
-        <div style={{ padding: "14px 18px", borderRadius: 16, background: "rgba(255,255,255,0.03)", border: `1px solid ${C.border}`, marginBottom: 16 }}>
-          <div style={{ fontSize: 12, color: C.textMuted, lineHeight: 1.7 }}>
-            💡 <strong style={{ color: C.text }}>AI 图像识别</strong>需要配置 Vision API Key。<br />
-            没有也没关系——点下方「跳过」直接手动填写三个核心数字即可。<br />
-            <span style={{ fontSize: 11, opacity: 0.7 }}>如需配置：我的档案 → 高级设置</span>
+        <div style={{ padding: "14px 18px", borderRadius: 16, background: "rgba(255,255,255,0.05)", border: `1px solid ${C.border}`, marginBottom: 16 }}>
+          <div style={{ fontSize: 13, color: C.textSub, lineHeight: 1.8 }}>
+            💡 <span style={{ color: C.text, fontWeight: 700 }}>AI 图像识别</span>需要配置 Vision API Key。
+            没有也没关系，直接点下方按钮手动填写三个核心数字即可。
+          </div>
+          <div style={{ fontSize: 11, color: C.textSub, marginTop: 6 }}>
+            如需配置 API Key：我的档案 → 高级设置
           </div>
         </div>
       )}
@@ -238,13 +240,16 @@ export function StepImport({ state, onUpdate, onNext }: {
         <div style={{ padding: "10px 14px", borderRadius: 10, background: C.roseDim, border: `1px solid ${C.rose}30`, fontSize: 13, color: C.rose, marginBottom: 12 }}>{"⚠ "}{parseError}</div>
       )}
 
-      <button onClick={handleParse} disabled={parsing || !preview || (!state.visionApiKey && state.visionProvider !== "ollama")}
-        style={{ width: "100%", padding: "14px", borderRadius: 14, border: "none", marginBottom: 16,
-          background: !preview || parsing || (!state.visionApiKey && state.visionProvider !== "ollama") ? "rgba(255,255,255,0.05)" : `linear-gradient(135deg,${C.emerald},#059669)`,
-          color: !preview || parsing || (!state.visionApiKey && state.visionProvider !== "ollama") ? C.textMuted : "#fff",
-          fontSize: 15, fontWeight: 700, cursor: !preview || parsing ? "not-allowed" : "pointer" }}>
-        {parsing ? "AI 识别中..." : !state.visionApiKey && state.visionProvider !== "ollama" ? "请先配置 API Key" : preview ? "开始识别" : "请先上传截图"}
-      </button>
+      {/* 只在有API Key且有图片时显示识别按钮 */}
+      {(state.visionApiKey || state.visionProvider === "ollama") && (
+        <button onClick={handleParse} disabled={parsing || !preview}
+          style={{ width: "100%", padding: "14px", borderRadius: 14, border: "none", marginBottom: 16,
+            background: !preview || parsing ? "rgba(255,255,255,0.05)" : `linear-gradient(135deg,${C.emerald},#059669)`,
+            color: !preview || parsing ? C.textSub : "#fff",
+            fontSize: 15, fontWeight: 700, cursor: !preview || parsing ? "not-allowed" : "pointer" }}>
+          {parsing ? "AI 识别中..." : preview ? "开始识别" : "请先上传截图"}
+        </button>
+      )}
 
 
 
@@ -259,12 +264,12 @@ export function StepImport({ state, onUpdate, onNext }: {
       {/* 没有API Key也可以跳过直接手动填写 - 永远可点 */}
       {!state.parseSuccess && (
         <button onClick={() => { onUpdate("parseSuccess", true); onNext(); }}
-          style={{ width: "100%", padding: "12px", borderRadius: 14,
-            border: `1px solid ${C.emerald}40`,
+          style={{ width: "100%", padding: "14px", borderRadius: 14,
+            border: `1px solid ${C.emerald}50`,
             background: C.emeraldDim,
             color: C.emerald,
-            fontSize: 14, fontWeight: 600, cursor: "pointer" }}>
-          跳过，直接手动填写 →
+            fontSize: 15, fontWeight: 700, cursor: "pointer" }}>
+          直接手动填写 →
         </button>
       )}
     </div>
@@ -434,7 +439,7 @@ export function StepMeasurements({ state, onUpdate, onNext, onBack }: {
         </button>
         <button onClick={onNext} disabled={!m.weight || !m.basalMetabolicRate}
           style={{ flex: 1, padding: "13px", borderRadius: 12, border: "none", background: m.weight && m.basalMetabolicRate ? `linear-gradient(135deg,${C.emerald},#059669)` : "rgba(255,255,255,0.05)", color: m.weight && m.basalMetabolicRate ? "#fff" : C.textMuted, fontSize: 15, fontWeight: 700, cursor: m.weight && m.basalMetabolicRate ? "pointer" : "not-allowed" }}>
-          {m.weight && m.basalMetabolicRate ? "进入Dashboard ->" : "请至少填写体重和BMR"}
+          {m.weight && m.basalMetabolicRate ? "填写基础信息 ->" : "请至少填写体重和BMR"}
         </button>
       </div>
     </div>
