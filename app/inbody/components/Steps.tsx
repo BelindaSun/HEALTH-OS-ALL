@@ -188,7 +188,7 @@ export function StepImport({ state, onUpdate, onNext }: {
   return (
     <div style={{ maxWidth: 600, margin: "0 auto" }}>
       <div style={{ textAlign: "center", marginBottom: 32 }}>
-        <div style={{ fontSize: 12, letterSpacing: "0.2em", color: C.emerald, marginBottom: 10, textTransform: "uppercase" }}>01 / 03</div>
+        <div style={{ fontSize: 12, letterSpacing: "0.2em", color: C.emerald, marginBottom: 10, textTransform: "uppercase" }}>01 / 02</div>
         <h2 style={{ fontSize: 30, fontWeight: 800, color: C.text, margin: 0 }}>上传 InBody 截图</h2>
         <p style={{ color: C.textMuted, fontSize: 13, marginTop: 8 }}>拍照或截图你的 InBody 报告，AI 自动识别所有数值</p>
       </div>
@@ -320,7 +320,7 @@ export function StepMeasurements({ state, onUpdate, onNext, onBack }: {
   return (
     <div style={{ maxWidth: 600, margin: "0 auto" }}>
       <div style={{ textAlign: "center", marginBottom: 28 }}>
-        <div style={{ fontSize: 12, letterSpacing: "0.2em", color: C.emerald, marginBottom: 10, textTransform: "uppercase" }}>02 / 03</div>
+        <div style={{ fontSize: 12, letterSpacing: "0.2em", color: C.emerald, marginBottom: 10, textTransform: "uppercase" }}>02 / 02</div>
         <h2 style={{ fontSize: 30, fontWeight: 800, color: C.text, margin: 0 }}>核对 / 手动填写数据</h2>
         <p style={{ color: C.textMuted, fontSize: 13, marginTop: 6 }}>
           {state.parseSuccess && state.parsedFields > 0 ? `AI 已识别 ${state.parsedFields} 个字段，请核对并补填缺失项` : "请对照报告逐项填写"}
@@ -429,7 +429,7 @@ export function StepMeasurements({ state, onUpdate, onNext, onBack }: {
         </button>
         <button onClick={onNext} disabled={!m.weight || !m.basalMetabolicRate}
           style={{ flex: 1, padding: "13px", borderRadius: 12, border: "none", background: m.weight && m.basalMetabolicRate ? `linear-gradient(135deg,${C.emerald},#059669)` : "rgba(255,255,255,0.05)", color: m.weight && m.basalMetabolicRate ? "#fff" : C.textMuted, fontSize: 15, fontWeight: 700, cursor: m.weight && m.basalMetabolicRate ? "pointer" : "not-allowed" }}>
-          {m.weight && m.basalMetabolicRate ? "填写基础信息 ->" : "请至少填写体重和BMR"}
+          {m.weight && m.basalMetabolicRate ? "进入Dashboard ->" : "请至少填写体重和BMR"}
         </button>
       </div>
     </div>
