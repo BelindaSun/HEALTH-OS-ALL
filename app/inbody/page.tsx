@@ -328,11 +328,7 @@ export default function InBodyOS() {
           />
         )}
         {state.step === "dashboard" && (
-<<<<<<< HEAD
-          <Dashboard state={state} onReset={() => { setState(INIT); localStorage.removeItem(STORAGE_KEY); }} onBack={goBack} />
-=======
           <Dashboard state={state} onBack={goBack} />
->>>>>>> 9c968ca (Personal Body OS - Alpha ready)
         )}
       </div>
     </div>
