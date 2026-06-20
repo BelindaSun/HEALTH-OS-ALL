@@ -225,10 +225,11 @@ export function StepImport({ state, onUpdate, onNext }: {
 
       {/* AI识别区 — 引擎配置在"我的档案 > 高级设置"里 */}
       {(!state.visionApiKey && state.visionProvider !== "ollama") && (
-        <div style={{ padding: "14px 18px", borderRadius: 16, background: C.amberDim, border: `1px solid ${C.amber}30`, marginBottom: 16, display: "flex", alignItems: "center", gap: 12 }}>
-          <div>
-            <div style={{ fontSize: 13, fontWeight: 700, color: C.amber, marginBottom: 2 }}>需要配置 AI Key</div>
-            <div style={{ fontSize: 12, color: C.textMuted }}>前往「我的档案 → 高级设置」配置 API Key 后即可自动识别</div>
+        <div style={{ padding: "14px 18px", borderRadius: 16, background: "rgba(255,255,255,0.03)", border: `1px solid ${C.border}`, marginBottom: 16 }}>
+          <div style={{ fontSize: 12, color: C.textMuted, lineHeight: 1.7 }}>
+            💡 <strong style={{ color: C.text }}>AI 图像识别</strong>需要配置 Vision API Key。<br />
+            没有也没关系——点下方「跳过」直接手动填写三个核心数字即可。<br />
+            <span style={{ fontSize: 11, opacity: 0.7 }}>如需配置：我的档案 → 高级设置</span>
           </div>
         </div>
       )}
@@ -255,10 +256,14 @@ export function StepImport({ state, onUpdate, onNext }: {
         </button>
       )}
 
-      {/* 没有API Key也可以跳过直接手动填写 */}
+      {/* 没有API Key也可以跳过直接手动填写 - 永远可点 */}
       {!state.parseSuccess && (
         <button onClick={() => { onUpdate("parseSuccess", true); onNext(); }}
-          style={{ width: "100%", padding: "12px", borderRadius: 14, border: `1px solid ${C.border}`, background: "transparent", color: C.textMuted, fontSize: 14, fontWeight: 600, cursor: "pointer" }}>
+          style={{ width: "100%", padding: "12px", borderRadius: 14,
+            border: `1px solid ${C.emerald}40`,
+            background: C.emeraldDim,
+            color: C.emerald,
+            fontSize: 14, fontWeight: 600, cursor: "pointer" }}>
           跳过，直接手动填写 →
         </button>
       )}
