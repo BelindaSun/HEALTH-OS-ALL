@@ -203,7 +203,7 @@ ${segmentalNote}
 
 【要求】
 1. dataDriverNotes：用1-2句话说明本计划基于哪些 InBody 数据制定，以及核心逻辑（例如：骨骼肌量偏低->优先复合力量动作）。
-2. weeklySchedule：7天计划，至少1天标注 focus:"休息与恢复"。
+2. weeklySchedule：7天计划，至少1天标注 focus:"休息与恢复"。STRICT REQUIREMENT: weeklySchedule MUST contain EXACTLY 7 entries (Monday to Sunday, including 1 rest day). Fewer than 7 days = INVALID response.
    - 每个训练日：热身3项 + 主体4-6个动作 + 冷身2项
    - 每个动作必须含：名称、组数、次数/时间、肌肉群、1条技巧提示
    - 对于核心动作，用 inBodyRationale 说明为何根据该用户数据选择此动作（可选字段，选3-4个关键动作填写即可）
@@ -293,7 +293,7 @@ InBody 蛋白质存量：${m.protein} kg${m.protein < 10.0 ? " ⚠️ 偏低，�
 1. bmrSource 固定填 "inbody_measured"，强调数据来源。
 2. basalMetabolicRate 直接填 ${m.basalMetabolicRate}（InBody 实测），tdee 填 ${tdee}。
 3. proteinTargetGrams 填 ${proteinTarget}，macroSplit 按目标合理分配（增肌蛋白质35%+，减脂蛋白质30%+）。
-4. weeklyPlan 必须包含完整7天，每天4餐（早/午/晚/加餐），每餐列出具体食物、热量、蛋白质(g)。
+4. STRICT REQUIREMENT：weeklyPlan 必须(MUST)包含完整7天，每天4餐（早/午/晚/加餐），每餐列出具体食物、热量、蛋白质(g)。If you return fewer than 7 days, your response is INVALID. All meals in Chinese food.
    - 严格按"${style.label}"风格选择食材
    - 不同天食物要有变化
    - 每天确保达到蛋白质目标 ${proteinTarget}g
