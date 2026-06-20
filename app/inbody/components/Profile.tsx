@@ -239,7 +239,13 @@ function GoalsSection({ saved, onSave }: {
 function AdvancedSection({ saved, onSave }: {
   saved: Partial<AppState>; onSave: (p: Partial<AppState>) => void;
 }) {
-  const [provider, setProvider] = useState(saved.provider ?? "qwen");
+  // Vision (image recognition)
+  const [visionProvider, setVisionProvider] = useState(saved.visionProvider ?? "qwen");
+  const [visionApiKey, setVisionApiKey] = useState(saved.visionApiKey ?? "");
+  const [showVisionKey, setShowVisionKey] = useState(false);
+
+  // Text (AI analysis)
+  const [provider, setProvider] = useState(saved.provider ?? "deepseek");
   const [apiKey, setApiKey] = useState(saved.apiKey ?? "");
   const [modelName, setModelName] = useState(saved.modelName ?? "");
   const [showKey, setShowKey] = useState(false);
@@ -250,42 +256,86 @@ function AdvancedSection({ saved, onSave }: {
     color: C.text, fontSize: 13, fontFamily: "inherit", boxSizing: "border-box" as const,
   };
 
+  const providerBtn = (selected: boolean) => ({
+    padding: "7px 14px", borderRadius: 20, cursor: "pointer",
+    border: `1px solid ${selected ? C.emerald + "50" : C.border}`,
+    background: selected ? C.emeraldDim : "transparent",
+    color: selected ? C.emerald : C.textSub,
+    fontSize: 12, fontWeight: 600 as const,
+    display: "flex", alignItems: "center", gap: 6,
+  });
+
+  const VISION_TEXT_PROVIDERS = [
+    { id: "qwen",   label: "Qwen-VL",  tag: "国内直连" },
+    { id: "openai", label: "GPT-4o",   tag: "需VPN" },
+    { id: "claude", label: "Claude",   tag: "需VPN" },
+    { id: "ollama", label: "Ollama",   tag: "本地" },
+  ];
+
   return (
     <div>
       <div style={{ fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 4 }}>高级设置</div>
-      <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 20 }}>AI 配置和实验功能</div>
+      <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 24 }}>两套 AI 配置，用途不同</div>
 
-      <div style={{ marginBottom: 16 }}>
-        <div style={{ fontSize: 11, color: C.textMuted, marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.08em" }}>AI 服务商</div>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
-          {TEXT_PROVIDERS.map(p => (
-            <button key={p.id} onClick={() => { setProvider(p.id); setModelName(""); }}
-              style={{ padding: "7px 14px", borderRadius: 20, cursor: "pointer",
-                border: `1px solid ${provider === p.id ? C.emerald + "50" : C.border}`,
-                background: provider === p.id ? C.emeraldDim : "transparent",
-                color: provider === p.id ? C.emerald : C.textSub,
-                fontSize: 12, fontWeight: 600, display: "flex", alignItems: "center", gap: 6 }}>
+      {/* ── Vision API (图像识别) ── */}
+      <div style={{ padding: "16px 18px", borderRadius: 16, background: "rgba(255,255,255,0.03)", border: `1px solid ${C.border}`, marginBottom: 16 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+          <span style={{ fontSize: 14 }}>📷</span>
+          <span style={{ fontSize: 13, fontWeight: 700, color: C.text }}>图像识别</span>
+          <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 10, background: C.skyDim, color: C.sky }}>上传 InBody 截图时使用</span>
+        </div>
+        <div style={{ fontSize: 11, color: C.textMuted, marginBottom: 14 }}>
+          推荐 Qwen-VL（国内直连，免费额度充足）
+        </div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
+          {VISION_TEXT_PROVIDERS.map(p => (
+            <button key={p.id} onClick={() => setVisionProvider(p.id)} style={providerBtn(visionProvider === p.id)}>
               <span>{p.label}</span>
               <span style={{ fontSize: 10, opacity: 0.6, padding: "1px 5px", borderRadius: 4, background: "rgba(255,255,255,0.06)" }}>{p.tag}</span>
             </button>
           ))}
         </div>
-
-        <div style={{ marginBottom: 14 }}>
-          <div style={{ fontSize: 11, color: C.textMuted, marginBottom: 6 }}>API Key</div>
-          <div style={{ position: "relative" }}>
-            <input type={showKey ? "text" : "password"} value={apiKey}
-              onChange={e => setApiKey(e.target.value)}
-              placeholder={`${TEXT_PROVIDERS.find(p => p.id === provider)?.label ?? provider} API Key`}
-              style={{ ...inp, paddingRight: 72 }} />
-            <button onClick={() => setShowKey(v => !v)} style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", padding: "3px 8px", borderRadius: 6, border: `1px solid ${C.border}`, background: "transparent", color: C.textMuted, fontSize: 11, cursor: "pointer" }}>
-              {showKey ? "隐藏" : "显示"}
-            </button>
-          </div>
-          {apiKey && <div style={{ fontSize: 11, color: C.emerald, marginTop: 4 }}>✓ 已输入 {apiKey.length} 位</div>}
+        <div style={{ position: "relative", marginBottom: 6 }}>
+          <input type={showVisionKey ? "text" : "password"} value={visionApiKey}
+            onChange={e => setVisionApiKey(e.target.value)}
+            placeholder={`${VISION_TEXT_PROVIDERS.find(p => p.id === visionProvider)?.label ?? visionProvider} API Key`}
+            style={{ ...inp, paddingRight: 72 }} />
+          <button onClick={() => setShowVisionKey(v => !v)} style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", padding: "3px 8px", borderRadius: 6, border: `1px solid ${C.border}`, background: "transparent", color: C.textMuted, fontSize: 11, cursor: "pointer" }}>
+            {showVisionKey ? "隐藏" : "显示"}
+          </button>
         </div>
+        {visionApiKey && <div style={{ fontSize: 11, color: C.emerald }}>✓ 已配置 {visionApiKey.length} 位</div>}
+      </div>
 
-        <div style={{ marginBottom: 20 }}>
+      {/* ── Text API (文字分析) ── */}
+      <div style={{ padding: "16px 18px", borderRadius: 16, background: "rgba(255,255,255,0.03)", border: `1px solid ${C.border}`, marginBottom: 20 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+          <span style={{ fontSize: 14 }}>🧠</span>
+          <span style={{ fontSize: 13, fontWeight: 700, color: C.text }}>文字分析</span>
+          <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 10, background: C.violetDim, color: C.violet }}>AI 分析、Daily Reflection 等使用</span>
+        </div>
+        <div style={{ fontSize: 11, color: C.textMuted, marginBottom: 14 }}>
+          推荐 DeepSeek（国内直连，5元用很久）
+        </div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
+          {TEXT_PROVIDERS.map(p => (
+            <button key={p.id} onClick={() => { setProvider(p.id); setModelName(""); }} style={providerBtn(provider === p.id)}>
+              <span>{p.label}</span>
+              <span style={{ fontSize: 10, opacity: 0.6, padding: "1px 5px", borderRadius: 4, background: "rgba(255,255,255,0.06)" }}>{p.tag}</span>
+            </button>
+          ))}
+        </div>
+        <div style={{ position: "relative", marginBottom: 6 }}>
+          <input type={showKey ? "text" : "password"} value={apiKey}
+            onChange={e => setApiKey(e.target.value)}
+            placeholder={`${TEXT_PROVIDERS.find(p => p.id === provider)?.label ?? provider} API Key`}
+            style={{ ...inp, paddingRight: 72 }} />
+          <button onClick={() => setShowKey(v => !v)} style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", padding: "3px 8px", borderRadius: 6, border: `1px solid ${C.border}`, background: "transparent", color: C.textMuted, fontSize: 11, cursor: "pointer" }}>
+            {showKey ? "隐藏" : "显示"}
+          </button>
+        </div>
+        {apiKey && <div style={{ fontSize: 11, color: C.emerald, marginBottom: 10 }}>✓ 已配置 {apiKey.length} 位</div>}
+        <div style={{ marginTop: 10 }}>
           <div style={{ fontSize: 11, color: C.textMuted, marginBottom: 6 }}>模型名称（留空使用默认）</div>
           <input type="text" value={modelName} onChange={e => setModelName(e.target.value)}
             placeholder={provider === "qwen" ? "qwen-plus" : provider === "deepseek" ? "deepseek-chat" : provider === "openai" ? "gpt-4o" : provider === "claude" ? "claude-sonnet-4-6" : "留空使用默认"}
@@ -293,7 +343,7 @@ function AdvancedSection({ saved, onSave }: {
         </div>
       </div>
 
-      <button onClick={() => onSave({ provider, apiKey, modelName })}
+      <button onClick={() => onSave({ visionProvider, visionApiKey, provider, apiKey, modelName })}
         style={{ padding: "10px 28px", borderRadius: 12, border: "none", background: `linear-gradient(135deg,${C.emerald},#059669)`, color: "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>
         保存
       </button>
