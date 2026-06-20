@@ -54,6 +54,15 @@ export function StepGoal({
 
   return (
     <div style={{ maxWidth: 480, margin: "0 auto", paddingTop: 20 }}>
+      {/* Back button - top left, consistent */}
+      <button onClick={onBack} style={{
+        display: "inline-flex", alignItems: "center", gap: 6,
+        padding: "7px 14px", borderRadius: 20, marginBottom: 24,
+        border: `1px solid ${C.border}`, background: "transparent",
+        color: C.textMuted, fontSize: 13, cursor: "pointer",
+      }}>
+        ← 返回
+      </button>
       {/* Header */}
       <div style={{ textAlign: "center", marginBottom: 36 }}>
         <div style={{ fontSize: 11, letterSpacing: "0.2em", color: C.emerald, marginBottom: 12, textTransform: "uppercase" }}>
@@ -132,25 +141,21 @@ export function StepGoal({
         {selected ? "继续 →" : "请选择一个目标"}
       </button>
 
-      <button onClick={onBack} style={{
-        width: "100%", padding: "10px", borderRadius: 12,
-        border: `1px solid ${C.border}`, background: "transparent",
-        color: C.textMuted, fontSize: 13, cursor: "pointer",
-      }}>
-        ← 返回
-      </button>
+
     </div>
   );
 }
 
 // ── STEP 1: IMPORT ────────────────────────────────────────────
-export function StepImport({ state, onUpdate, onNext }: {
-  state: AppState; onUpdate: (k: string, v: any) => void; onNext: () => void;
+export function StepImport({ state, onUpdate, onNext, onBack }: {
+  state: AppState; onUpdate: (k: string, v: any) => void; onNext: () => void; onBack: () => void;
 }) {
   const [dragging, setDragging] = useState(false);
   const [parsing, setParsing] = useState(false);
   const [parseError, setParseError] = useState<string | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
+  const [showKeyConfig, setShowKeyConfig] = useState(false);
+  const [inlineKey, setInlineKey] = useState(state.visionApiKey ?? "");
   const fileRef = useRef<HTMLInputElement>(null);
 
   const handleFile = useCallback((file: File | null) => {
@@ -188,6 +193,15 @@ export function StepImport({ state, onUpdate, onNext }: {
   return (
     <div style={{ maxWidth: 600, margin: "0 auto" }}>
       <div style={{ textAlign: "center", marginBottom: 32 }}>
+      {/* Back button - top left, consistent */}
+      <button onClick={onBack} style={{
+        display: "inline-flex", alignItems: "center", gap: 6,
+        padding: "7px 14px", borderRadius: 20, marginBottom: 24,
+        border: `1px solid ${C.border}`, background: "transparent",
+        color: C.textMuted, fontSize: 13, cursor: "pointer",
+      }}>
+        ← 返回
+      </button>
         <div style={{ fontSize: 12, letterSpacing: "0.2em", color: C.emerald, marginBottom: 10, textTransform: "uppercase" }}>01 / 02</div>
         <h2 style={{ fontSize: 30, fontWeight: 800, color: C.text, margin: 0 }}>上传 InBody 截图</h2>
         <p style={{ color: C.textSub, fontSize: 13, marginTop: 8 }}>拍照或截图你的 InBody 报告，AI 自动识别所有数值</p>
@@ -225,14 +239,68 @@ export function StepImport({ state, onUpdate, onNext }: {
 
       {/* AI识别区 — 引擎配置在"我的档案 > 高级设置"里 */}
       {(!state.visionApiKey && state.visionProvider !== "ollama") && (
-        <div style={{ padding: "14px 18px", borderRadius: 16, background: "rgba(255,255,255,0.05)", border: `1px solid ${C.border}`, marginBottom: 16 }}>
-          <div style={{ fontSize: 13, color: C.textSub, lineHeight: 1.8 }}>
-            💡 <span style={{ color: C.text, fontWeight: 700 }}>AI 图像识别</span>需要配置 Vision API Key。
-            没有也没关系，直接点下方按钮手动填写三个核心数字即可。
+        <div style={{ borderRadius: 16, background: "rgba(255,255,255,0.03)", border: `1px solid ${C.border}`, marginBottom: 16, overflow: "hidden" }}>
+          <div style={{ padding: "14px 18px" }}>
+            <div style={{ fontSize: 13, color: C.textSub, lineHeight: 1.7 }}>
+              💡 <span style={{ color: C.text, fontWeight: 700 }}>AI 图像识别</span>需要 Vision API Key。
+              没有也可以直接手动填写数据。
+            </div>
+            <button onClick={() => setShowKeyConfig(v => !v)} style={{
+              marginTop: 10, padding: "6px 14px", borderRadius: 20,
+              border: `1px solid ${C.emerald}40`, background: C.emeraldDim,
+              color: C.emerald, fontSize: 12, fontWeight: 700, cursor: "pointer",
+            }}>
+              {showKeyConfig ? "收起" : "🔑 在这里配置 API Key →"}
+            </button>
           </div>
-          <div style={{ fontSize: 11, color: C.textSub, marginTop: 6 }}>
-            如要配置 API Key：我的档案 （最后一页） → 高级设置
-          </div>
+
+          {showKeyConfig && (
+            <div style={{ padding: "0 18px 16px", borderTop: `1px solid ${C.border}` }}>
+              <div style={{ fontSize: 11, color: C.textMuted, margin: "12px 0 8px", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                Vision 服务商
+              </div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
+                {[
+                  { id: "qwen",   label: "Qwen-VL",  tag: "国内直连 推荐" },
+                  { id: "openai", label: "GPT-4o",   tag: "需VPN" },
+                  { id: "claude", label: "Claude",   tag: "需VPN" },
+                  { id: "ollama", label: "Ollama",   tag: "本地" },
+                ].map(p => (
+                  <button key={p.id} onClick={() => onUpdate("visionProvider", p.id)} style={{
+                    padding: "5px 12px", borderRadius: 16, cursor: "pointer", fontSize: 11, fontWeight: 600,
+                    border: `1px solid ${state.visionProvider === p.id ? C.emerald + "50" : C.border}`,
+                    background: state.visionProvider === p.id ? C.emeraldDim : "transparent",
+                    color: state.visionProvider === p.id ? C.emerald : C.textSub,
+                  }}>
+                    {p.label} <span style={{ opacity: 0.6 }}>{p.tag}</span>
+                  </button>
+                ))}
+              </div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <input
+                  type="password"
+                  value={inlineKey}
+                  onChange={e => setInlineKey(e.target.value)}
+                  placeholder={`${state.visionProvider} API Key`}
+                  style={{ flex: 1, padding: "9px 12px", borderRadius: 10, outline: "none",
+                    border: `1px solid ${inlineKey ? C.emerald + "50" : C.border}`,
+                    background: "rgba(255,255,255,0.04)", color: C.text, fontSize: 13, fontFamily: "inherit" }}
+                />
+                <button onClick={() => {
+                  onUpdate("visionApiKey", inlineKey);
+                  setShowKeyConfig(false);
+                }} style={{
+                  padding: "9px 16px", borderRadius: 10, border: "none",
+                  background: inlineKey ? `linear-gradient(135deg,${C.emerald},#059669)` : "rgba(255,255,255,0.05)",
+                  color: inlineKey ? "#fff" : C.textMuted,
+                  fontSize: 13, fontWeight: 700, cursor: inlineKey ? "pointer" : "not-allowed",
+                }}>
+                  保存
+                </button>
+              </div>
+              {inlineKey && <div style={{ fontSize: 11, color: C.emerald, marginTop: 6 }}>✓ 保存后即可开始识别</div>}
+            </div>
+          )}
         </div>
       )}
 
@@ -330,6 +398,15 @@ export function StepMeasurements({ state, onUpdate, onNext, onBack }: {
   return (
     <div style={{ maxWidth: 600, margin: "0 auto" }}>
       <div style={{ textAlign: "center", marginBottom: 28 }}>
+      {/* Back button - top left, consistent */}
+      <button onClick={onBack} style={{
+        display: "inline-flex", alignItems: "center", gap: 6,
+        padding: "7px 14px", borderRadius: 20, marginBottom: 24,
+        border: `1px solid ${C.border}`, background: "transparent",
+        color: C.textMuted, fontSize: 13, cursor: "pointer",
+      }}>
+        ← 返回
+      </button>
         <div style={{ fontSize: 12, letterSpacing: "0.2em", color: C.emerald, marginBottom: 10, textTransform: "uppercase" }}>02 / 02</div>
         <h2 style={{ fontSize: 30, fontWeight: 800, color: C.text, margin: 0 }}>核对 / 手动填写数据</h2>
         <p style={{ color: C.textMuted, fontSize: 13, marginTop: 6 }}>
@@ -433,13 +510,10 @@ export function StepMeasurements({ state, onUpdate, onNext, onBack }: {
         </div>
       )}
 
-      <div style={{ display: "flex", gap: 10, marginTop: 20 }}>
-        <button onClick={onBack} style={{ padding: "13px 22px", borderRadius: 12, border: `1px solid ${C.border}`, background: "transparent", color: C.textMuted, fontSize: 13, cursor: "pointer" }}>
-          {"<"} 返回
-        </button>
+      <div style={{ marginTop: 20 }}>
         <button onClick={onNext} disabled={!m.weight || !m.basalMetabolicRate}
-          style={{ flex: 1, padding: "13px", borderRadius: 12, border: "none", background: m.weight && m.basalMetabolicRate ? `linear-gradient(135deg,${C.emerald},#059669)` : "rgba(255,255,255,0.05)", color: m.weight && m.basalMetabolicRate ? "#fff" : C.textMuted, fontSize: 15, fontWeight: 700, cursor: m.weight && m.basalMetabolicRate ? "pointer" : "not-allowed" }}>
-          {m.weight && m.basalMetabolicRate ? "进入Dashboard ->" : "请至少填写体重和BMR"}
+          style={{ width: "100%", padding: "15px", borderRadius: 12, border: "none", background: m.weight && m.basalMetabolicRate ? `linear-gradient(135deg,${C.emerald},#059669)` : "rgba(255,255,255,0.05)", color: m.weight && m.basalMetabolicRate ? "#fff" : C.textMuted, fontSize: 15, fontWeight: 700, cursor: m.weight && m.basalMetabolicRate ? "pointer" : "not-allowed" }}>
+          {m.weight && m.basalMetabolicRate ? "进入 Dashboard →" : "请至少填写体重和BMR"}
         </button>
       </div>
     </div>

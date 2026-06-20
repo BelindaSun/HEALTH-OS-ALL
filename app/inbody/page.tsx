@@ -317,6 +317,7 @@ export default function InBodyOS() {
             state={state}
             onUpdate={update}
             onNext={() => go("measurements")}
+            onBack={() => go("profile")}
           />
         )}
         {state.step === "measurements" && (
