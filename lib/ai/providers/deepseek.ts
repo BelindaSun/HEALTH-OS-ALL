@@ -4,7 +4,7 @@
 export async function callDeepSeek(
   prompt: string,
   apiKey: string,
-  model = "deepseek-chat"
+  model = "deepseek-v4-flash",
 ): Promise<string> {
   const res = await fetch("https://api.deepseek.com/chat/completions", {
     method: "POST",
